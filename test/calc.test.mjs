@@ -140,3 +140,14 @@ test('yıllıklandırılmış getiri', () => {
   close(annualized(1, 3652.5), Math.pow(2, 0.1) - 1);
   close(annualized(0.1, 365.25), 0.1);
 });
+
+test('statik site: dosya adı ve sıkıştırılmış günlük veri', async () => {
+  const { staticFileName, unpackDaily } = await import('../public/js/calc.js');
+  assert.equal(staticFileName('^GSPC'), '_5eGSPC');
+  assert.equal(staticFileName('GC=F'), 'GC_3dF');
+  assert.equal(staticFileName('XU100.IS'), 'XU100.IS');
+  const d = unpackDaily({ k0: '2024-02-28', dk: [0, 1, 1, 4], c: [1, 2, 3, 4] });
+  assert.deepEqual(d.k, ['2024-02-28', '2024-02-29', '2024-03-01', '2024-03-05']);
+  assert.deepEqual(d.a, [1, 2, 3, 4]);
+  assert.equal(d.dk, undefined);
+});

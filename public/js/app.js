@@ -437,7 +437,11 @@ function renderMeasure(m, cur, adj) {
   const other = cur === 'TRY' ? 'USD' : 'TRY';
   if (!D.item.lockCur && convAvailable(other)) {
     const mo = safe(() => computeMeasure(other, adj));
-    if (mo) items.push([`${F.CUR_LABEL[other]} bazında`, F.fmtPct(mo.pct)]);
+    if (mo) {
+      // Kur verisi eksikliğinden farklı bir tarihten başlıyorsa belirt
+      const note = mo.k0 && m.k0 && mo.k0 !== m.k0 && state.measure.kind !== 'points' ? ` (başlangıç ${F.fmtDateKeyNumeric(mo.k0)})` : '';
+      items.push([`${F.CUR_LABEL[other]} bazında${note}`, F.fmtPct(mo.pct)]);
+    }
   }
   if (hasDivs()) {
     const ma = safe(() => computeMeasure(cur, !adj));
@@ -813,7 +817,9 @@ function renderList() {
     if (!found.length && !extra.length) {
       const d = document.createElement('div');
       d.className = 'list-empty';
-      d.textContent = state.query.trim().length >= 2 ? 'Aranıyor…' : 'Sonuç yok';
+      d.textContent = api.isStatic
+        ? 'Sonuç yok. Web sürümünde yalnızca listedeki ~1.200 sembol var.'
+        : state.query.trim().length >= 2 ? 'Aranıyor…' : 'Sonuç yok';
       frag.append(d);
     }
   } else if (state.group === 'fav') {
@@ -860,7 +866,7 @@ function onSearchInput() {
   renderList();
   clearTimeout(searchTimer);
   const q = state.query.trim();
-  if (q.length < 2) return;
+  if (q.length < 2 || api.isStatic) return; // web sürümünde yalnızca hazır liste aranır
   const seq = ++searchSeq;
   searchTimer = setTimeout(async () => {
     try {
@@ -1032,7 +1038,8 @@ async function openPhoneDialog() {
 }
 
 function bindPhone() {
-  if (!LOCAL_HOSTS.has(location.hostname)) return; // telefondan açılmışsa gösterme
+  // Telefondan ya da web (GitHub Pages) sürümünden açılmışsa gösterme
+  if (api.isStatic || !LOCAL_HOSTS.has(location.hostname)) return;
   $('phoneBtn').hidden = false;
   $('phoneBtn').addEventListener('click', openPhoneDialog);
   $('phoneDlg').addEventListener('click', (e) => { if (e.target === $('phoneDlg')) $('phoneDlg').close(); });
@@ -1052,6 +1059,11 @@ async function init() {
     state.catalog = await api.catalog();
   } catch (e) {
     console.warn('Katalog yüklenemedi', e);
+  }
+  if (api.isStatic && api.builtAt) {
+    const t = new Date(api.builtAt);
+    const pad = (n) => String(n).padStart(2, '0');
+    $('dataAge').textContent = ` · Son güncelleme: ${t.getDate()} ${F.MONTHS[t.getMonth()]} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
   }
   indexCatalog();
   renderChips();

@@ -4,17 +4,24 @@ ABD ve Borsa İstanbul hisseleri, endeksler, altın, gümüş ve diğer emtialar
 **toplam getiri (temettü düzeltmeli)** grafik uygulaması. Fiyatlar tek tıkla **TL ↔ USD**
 çevrilir, iki tarih arasındaki getiri büyük ve net bir şekilde gösterilir.
 
+## 👉 Hemen aç: **https://2n86njp68z-sketch.github.io/Grafik/**
+
+Kurulum yok; telefondan da bilgisayardan da linke dokunup açın. Telefonda tarayıcı menüsünden
+**“Ana Ekrana Ekle”** derseniz uygulama gibi simgesiyle açılır. Veriler hafta içi gün boyunca
+2 saatte bir, hafta sonu günde bir otomatik güncellenir (sayfanın altında son güncelleme saati yazar).
+
 ![Ekran görüntüsü](docs/ekran.png)
 
 ## Neler var?
 
-- **~1.250 hazır enstrüman**, sol menüde gruplar halinde:
-  - **BIST**: 596 hisse + 61 endeks (BIST 100, 30, 50, Banka, Sınai, Katılım, Temettü 25…)
+- **~1.200 hazır enstrüman**, sol menüde gruplar halinde:
+  - **BIST**: 596 hisse + BIST 100, BIST 30, BIST Banka, BIST Sınai endeksleri
+    (diğer BIST endekslerinin geçmiş verisi Yahoo Finance'te bulunmuyor)
   - **ABD**: S&P 500'ün tamamı (503 hisse), Dow Jones 30, popüler diğer hisseler (ASML, TSM, Shopify…),
-    24 endeks (S&P 500, Nasdaq, Dow, Russell, SOX, VIX ve **toplam getiri** versiyonları), 26 ETF
+    21 endeks (S&P 500, Nasdaq, Dow, Russell, SOX, VIX; S&P 500 ve Russell 2000'in **toplam getiri** versiyonları), 26 ETF
   - **Emtia**: Altın, **Gram Altın**, Gümüş, Gram Gümüş, Platin, Paladyum, Bakır, Petrol (WTI/Brent), Doğal Gaz
   - **Döviz & Kripto**: USD/TRY, EUR/TRY, GBP/TRY, EUR/USD, Dolar Endeksi, Bitcoin, Ethereum
-  - Listede olmayan her şey arama kutusundan bulunur (Yahoo Finance'teki tüm semboller)
+  - Bilgisayarda çalışan sürümde listede olmayan her şey arama kutusundan bulunur (Yahoo Finance'teki tüm semboller)
 - **Dönemler**: 1G · 1H · 1A · 3A · 6A · 1Y · 5Y · 10Y · Tümü
 - **Fiyat** veya **yüzde %** gösterimi; uzun dönemler için **logaritmik** ölçek
 - **TL / USD** dönüşümü: her gün, o günün USD/TRY kuruyla çevrilir
@@ -27,7 +34,10 @@ ABD ve Borsa İstanbul hisseleri, endeksler, altın, gümüş ve diğer emtialar
 - **Telefondan aç**: bilgisayarda çalışırken QR kodu okutup aynı Wi-Fi'daki telefondan kullanın, ana ekrana ekleyin
 - Favoriler (☆), açık/koyu tema, paylaşılabilir bağlantı (`#s=THYAO.IS&r=5Y`)
 
-## Kurulum ve çalıştırma
+## Kendi bilgisayarında çalıştırmak (isteğe bağlı)
+
+Web sürümü yeterliyse bu bölüm gerekmez. Bilgisayarda çalışan sürümün farkı: veriler anlık gelir ve
+arama kutusu Yahoo Finance'teki her sembolü bulur.
 
 Tek gereksinim **[Node.js](https://nodejs.org) 18 veya üstü** (LTS sürümünü kurmanız yeterli).
 Başka hiçbir paket kurulmaz, internet bağlantısı veriyi çekmek için gereklidir.
@@ -78,8 +88,9 @@ daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not o
 ### Bilinmesi gerekenler
 
 - Veriler **Yahoo Finance**'ten gelir; borsalarda ~15 dakikaya kadar gecikmeli olabilir.
-- **Endeksler fiyat endeksidir** (temettü içermez). S&P 500, Nasdaq 100, Dow, Russell 2000 ve
-  S&P 600 için listede ayrıca *Toplam Getiri (TR)* versiyonları vardır; uygulama bunlara bağlantı verir.
+- **Endeksler fiyat endeksidir** (temettü içermez). S&P 500 ve Russell 2000 için listede ayrıca
+  *Toplam Getiri (TR)* versiyonları vardır; uygulama bunlara bağlantı verir. Diğer endekslerin temettü dahil
+  getirisi için ETF'lerine bakın (ör. Nasdaq 100 → QQQ, Dow → DIA): ETF grafikleri temettü dahildir.
 - **Altın/gümüş** fiyatları COMEX vadeli kontratlarıdır (spot fiyata çok yakındır).
   **Gram altın** = ons fiyatı ÷ 31,1035.
 - BIST'te **bedelli sermaye artırımları** Yahoo verisinde düzeltilmeyebilir; böyle bir günde
@@ -91,10 +102,13 @@ daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not o
 ```bash
 npm test          # birim testleri (hesaplamalar + sunucu)
 npm run catalog   # sembol listesini Yahoo'ya karşı yeniden doğrulayıp public/data/catalog.json'u üretir
+node scripts/build-static.mjs site   # web (GitHub Pages) sürümünü site/ klasörüne üretir
 ```
 
 Yeni halka arzları eklemek için `scripts/build-catalog.mjs` içindeki listeye sembolü ekleyip
 `npm run catalog` çalıştırın.
+
+Web sürümü `.github/workflows/pages.yml` ile GitHub Actions'ta derlenip GitHub Pages'e yüklenir.
 
 ```
 server.js                 Yerel web sunucusu (bağımlılıksız Node.js)
@@ -107,6 +121,7 @@ public/js/chart.js        Grafik katmanı (TradingView Lightweight Charts v4)
 public/js/format.js       Türkçe sayı/tarih biçimleri
 public/data/catalog.json  Hazır sembol listesi
 scripts/build-catalog.mjs Sembol listesini üretir
+scripts/build-static.mjs  Web sürümünü (hazır veri dosyalarıyla) üretir
 test/                     node:test birim testleri
 ```
 
