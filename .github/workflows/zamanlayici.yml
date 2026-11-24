@@ -1,0 +1,35 @@
+# Bakım: "Web sitesini güncelle" iş akışının zamanlayıcısını sıfırlar (kapatıp yeniden açar)
+# ve hemen bir güncelleme başlatır. GitHub zamanlanmış çalışmaları başlatmazsa elle çalıştırılır.
+name: Zamanlayıcıyı sıfırla
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      API: https://api.github.com/repos/${{ github.repository }}/actions/workflows/pages.yml
+    steps:
+      - name: Kapat ve yeniden aç
+        run: |
+          h=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+          curl -fsS -X PUT "${h[@]}" "$API/disable" && echo "kapatıldı" || true
+          sleep 15
+          # Yeniden açma başarısız kalırsa site güncellenmez: birkaç kez dene
+          for i in 1 2 3 4 5 6; do
+            curl -fsS -X PUT "${h[@]}" "$API/enable" && break
+            sleep 10
+          done
+          state=$(curl -fsS "${h[@]}" "$API" | jq -r .state)
+          echo "Durum: $state"
+          [ "$state" = "active" ]
+      - name: Hemen bir güncelleme başlat
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$API/dispatches" -d "{\"ref\":\"${{ github.event.repository.default_branch }}\"}" && echo "başlatıldı"
