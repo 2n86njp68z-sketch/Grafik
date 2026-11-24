@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: pages
@@ -25,6 +26,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Zamanlanmış güncellemeyi canlı tut
+        # GitHub, 60 gün yeni commit gelmeyen açık repolarda zamanlanmış iş akışlarını durdurur.
+        # Bu iş akışını "etkinleştir" çağrısı o sayacı sıfırlar; commit gerekmez.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsS -X PUT -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/pages.yml/enable" \
+            && echo "Zamanlayıcı yenilendi"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
