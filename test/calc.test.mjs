@@ -146,8 +146,23 @@ test('statik site: dosya adı ve sıkıştırılmış günlük veri', async () =
   assert.equal(staticFileName('^GSPC'), '_5eGSPC');
   assert.equal(staticFileName('GC=F'), 'GC_3dF');
   assert.equal(staticFileName('XU100.IS'), 'XU100.IS');
-  const d = unpackDaily({ k0: '2024-02-28', dk: [0, 1, 1, 4], c: [1, 2, 3, 4] });
+  const hist = { k0: '2024-02-28', dk: [0, 1], c: [100, 102] };
+  const rec = { symbol: 'X', currency: 'USD', k0: '2024-03-01', dk: [0, 4], c: [101, 104], fe: [['2024-03-01', 0.98]] };
+  const d = unpackDaily(hist, rec);
   assert.deepEqual(d.k, ['2024-02-28', '2024-02-29', '2024-03-01', '2024-03-05']);
-  assert.deepEqual(d.a, [1, 2, 3, 4]);
+  assert.deepEqual(d.c, [100, 102, 101, 104]);
+  assert.deepEqual(d.a.map((v) => +v.toFixed(6)), [98, 99.96, 101, 104]);
+  assert.equal(d.symbol, 'X');
   assert.equal(d.dk, undefined);
+  // istemci tarafı faktör uygulaması sunucunun a değerleriyle aynı olmalı
+  const { processDaily } = await import('../public/js/calc.js');
+  const ist = (k) => keyToSec(k) + 7 * 3600;
+  const keys = ['2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05'];
+  const srv = processDaily({
+    meta: { exchangeTimezoneName: 'Europe/Istanbul' }, timestamp: keys.map(ist),
+    indicators: { quote: [{ close: [100, 102, 101, 103] }] },
+    events: { dividends: { a: { amount: 2, date: ist('2024-01-04') } } },
+  });
+  const cli = unpackDaily({ k0: null, dk: [], c: [] }, { k0: keys[0], dk: [0, 1, 1, 1], c: srv.c, fe: srv.fe });
+  cli.a.forEach((v, i) => close(v, srv.a[i]));
 });
