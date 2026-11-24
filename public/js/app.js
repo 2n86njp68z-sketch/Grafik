@@ -276,6 +276,17 @@ async function render(keepRange = false) {
     } catch (e) {
       if (token !== renderToken || d !== D) return;
       setLoading(false);
+      if (/gün içi veri yok/.test(e?.message || '')) {
+        // Bazı enstrümanların Yahoo'da gün içi verisi hiç yok: hata değil, bilgi göster
+        state.view = null;
+        syncControls();
+        renderHeader();
+        chart.setView({ points: [], formatter: (v) => String(v), up: true });
+        renderLegend(null);
+        renderMeasure(null, effectiveCur(), useAdj());
+        showMsg('Bu enstrüman için gün içi (1G / 1H) veri yok. Daha uzun bir dönem seçin.');
+        return;
+      }
       showError(e, () => render());
       return;
     }
@@ -472,6 +483,13 @@ function renderNotes(view, cur, truncated, earliest) {
     add('ℹ️ BIST endeksleri fiyat endeksidir (temettüler hariç).');
   }
   if (it.lockCur) add('ℹ️ Bu enstrüman zaten bir kur olduğu için yalnızca TL cinsinden gösterilir.');
+  {
+    // Fiyat uzun süredir hiç değişmiyorsa (işlem durdurulmuş olabilir) uyar
+    const c = D.daily.c;
+    let i = c.length - 1;
+    while (i > 0 && c[i - 1] === c[i]) i--;
+    if (c.length - 1 - i >= 20) add(`⚠️ Fiyat ${F.fmtDateKeyNumeric(D.daily.k[i])} tarihinden beri hiç değişmiyor; bu enstrüman işleme kapalı olabilir.`);
+  }
   if (state.tr && !hasDivs() && (it.t === 'stock' || it.t === 'etf')) add('ℹ️ Bu enstrüman için temettü kaydı bulunmuyor; grafik fiyat getirisini gösterir.');
   if (useAdj()) add(`✓ Toplam getiri: ${D.daily.divs.length} temettü ödemesi, ödendiği gün yeniden yatırılmış kabul edildi.`);
   if (cur !== D.native && !it.lockCur) {

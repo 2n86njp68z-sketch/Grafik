@@ -17,6 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || path.join(ROOT, 'site'));
 const CONCURRENCY = Number(process.env.CONCURRENCY) || 4;
 const LIMIT = Number(process.env.LIMIT) || Infinity; // test için: ilk N sembol
+const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null; // test için: yalnızca bu semboller
 
 const r6 = (v) => (v == null ? v : Number(v.toPrecision(6)));
 
@@ -98,8 +99,10 @@ async function main() {
   fs.mkdirSync(path.join(OUT, 'data', 'i'), { recursive: true });
 
   const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'data', 'catalog.json'), 'utf8'));
-  const symbols = [...new Set(['TRY=X', ...catalog.items.map((it) => it.base || it.s)])].slice(0, LIMIT);
+  const symbols = [...new Set(['TRY=X', ...catalog.items.map((it) => it.base || it.s)])]
+    .filter((s) => !ONLY || ONLY.includes(s) || s === 'TRY=X').slice(0, LIMIT);
   const failed = [];
+  const failedIntra = [];
   let bytes = 0;
   const write = (rel, obj) => {
     const s = JSON.stringify(obj);
@@ -118,8 +121,11 @@ async function main() {
       try {
         const intra = await getIntraday(sym, '5d');
         const packed = packIntraday(intra, daily);
-        if (packed) write(`i/${staticFileName(sym)}.json`, packed);
+        // Gün içi verisi olmayanlar için de dosya yaz (tarayıcıda 404 hatası olmasın)
+        write(`i/${staticFileName(sym)}.json`, packed || { '5d': null, '1d': null });
       } catch (e) {
+        if (e.status === 404) write(`i/${staticFileName(sym)}.json`, { '5d': null, '1d': null });
+        else failedIntra.push(sym);
         console.warn(`  gün içi yok: ${sym} (${e.message})`);
       }
     } catch (e) {
@@ -142,7 +148,12 @@ async function main() {
   fs.writeFileSync(path.join(OUT, 'js', 'config.js'),
     `// build-static.mjs tarafından üretildi\nexport const STATIC = true;\nexport const BUILT_AT = ${JSON.stringify(builtAt)};\n`);
   fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
-  write('meta.json', { builtAt, symbols: symbols.length - failed.length, failed });
+  // Bu turda alınamayanların önceki sürümdeki dosyaları korunur (iş akışı bu listeyi kullanır)
+  const failedFiles = [
+    ...failed.flatMap((s) => ['d', 'r', 'i'].map((dir) => `data/${dir}/${staticFileName(s)}.json`)),
+    ...failedIntra.map((s) => `data/i/${staticFileName(s)}.json`),
+  ];
+  write('meta.json', { builtAt, symbols: symbols.length - failed.length, failed, failedFiles });
 
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
   console.log(`Bitti: ${symbols.length - failed.length}/${symbols.length} sembol, ${(bytes / 1e6).toFixed(1)} MB veri, ${secs} sn -> ${OUT}`);
