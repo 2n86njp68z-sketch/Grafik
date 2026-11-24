@@ -155,7 +155,8 @@ async function yahooMeta(sym) {
       const res = j?.chart?.result?.[0];
       if (!res) return null;
       const ts = res.timestamp || [];
-      return { meta: res.meta, lastTs: ts.length ? ts[ts.length - 1] : 0 };
+      const closes = (res.indicators?.quote?.[0]?.close || []).filter((v) => v != null);
+      return { meta: res.meta, lastTs: ts.length ? ts[ts.length - 1] : 0, bars: closes.length };
     } catch {
       await sleep(1000 * (attempt + 1));
     }
@@ -173,8 +174,9 @@ async function validateAll(symbols) {
     while (i < symbols.length) {
       const s = symbols[i++];
       const m = await yahooMeta(s);
-      if (m && m.lastTs && now - m.lastTs < 45 * 86400) out.set(s, m.meta);
-      else console.warn('  elendi:', s, m ? '(eski veri)' : '(bulunamadı)');
+      // Bazı semboller için Yahoo'da yalnızca anlık fiyat var, geçmiş yok: grafiği çizilemez, ele.
+      if (m && m.lastTs && now - m.lastTs < 45 * 86400 && m.bars >= 5) out.set(s, m.meta);
+      else console.warn('  elendi:', s, !m ? '(bulunamadı)' : m.bars < 5 ? '(geçmiş veri yok)' : '(eski veri)');
     }
   }
   await Promise.all(Array.from({ length: 6 }, worker));
@@ -254,6 +256,7 @@ async function main() {
     source: 'Yahoo Finance (doğrulama), S&P 500 listesi: github.com/datasets/s-and-p-500-companies',
     groups: GROUPS,
     items: [...items.values()].map((it) => {
+      if (it.tr && !items.has(it.tr)) delete it.tr; // toplam getiri versiyonu Yahoo'da yoksa bağlantı verme
       const o = { s: it.s, n: it.n, t: it.t, cur: it.cur, g: it.g };
       for (const k of ['base', 'scale', 'tr', 'note', 'lockCur']) if (it[k] !== undefined) o[k] = it[k];
       return o;

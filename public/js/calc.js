@@ -387,3 +387,29 @@ export function annualized(pct, days) {
   if (!(days >= 365) || !(pct > -1)) return null;
   return Math.pow(1 + pct, 365.25 / days) - 1;
 }
+
+// ---------------------------------------------------------------------------
+// Statik site (GitHub Pages) veri dosyaları — scripts/build-static.mjs ile eşleşir
+// ---------------------------------------------------------------------------
+
+/** Sembol -> güvenli dosya adı ("^GSPC" -> "_5eGSPC", "GC=F" -> "GC_3dF"). */
+export function staticFileName(sym) {
+  return String(sym).replace(/[^A-Za-z0-9.-]/g, (c) => '_' + c.charCodeAt(0).toString(16));
+}
+
+/** Sıkıştırılmış günlük veriyi (k0 + gün farkları, a yoksa = c) açar. */
+export function unpackDaily(p) {
+  if (!p || !p.dk) return p;
+  const k = new Array(p.dk.length);
+  let day = keyToSec(p.k0) / 86400;
+  for (let i = 0; i < p.dk.length; i++) {
+    day += p.dk[i];
+    k[i] = secToKey(day * 86400);
+  }
+  const { dk, k0, ...rest } = p;
+  return { ...rest, k, a: p.a || p.c.slice(), t: [] };
+}
+
+export function unpackIntraday(p) {
+  return p ? { ...p, a: p.a || p.c.slice() } : p;
+}
