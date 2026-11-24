@@ -181,6 +181,7 @@ a { color: var(--accent-text); }
 .legend {
   position: absolute; z-index: 3; left: 16px; top: 12px; pointer-events: none;
   display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  background: var(--surface); /* eski tarayıcılar için */
   background: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; padding: 2px 6px 2px 2px;
 }
 .legend .lg-val { font-size: 16px; font-weight: 700; }
