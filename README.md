@@ -24,7 +24,8 @@ ABD ve Borsa İstanbul hisseleri, endeksler, altın, gümüş ve diğer emtialar
 - **Tarih aralığı getirisi**: başlangıç ve bitiş tarihi girin (veya *Grafikten seç* ile
   grafikte iki noktaya tıklayın) — ne kadar artmış/düşmüş büyük yazıyla görünür.
   Yanında süre, yıllık ortalama getiri, diğer para birimindeki getiri ve temettüsüz getiri de yazar.
-- Favoriler (☆), açık/koyu tema, telefona uyumlu arayüz, paylaşılabilir bağlantı (`#s=THYAO.IS&r=5Y`)
+- **Telefondan aç**: bilgisayarda çalışırken QR kodu okutup aynı Wi-Fi'daki telefondan kullanın, ana ekrana ekleyin
+- Favoriler (☆), açık/koyu tema, paylaşılabilir bağlantı (`#s=THYAO.IS&r=5Y`)
 
 ## Kurulum ve çalıştırma
 
@@ -41,15 +42,17 @@ Başka hiçbir paket kurulmaz, internet bağlantısı veriyi çekmek için gerek
 
 ### Telefondan kullanmak
 
-Bilgisayar ve telefon aynı Wi-Fi ağındaysa uygulamayı şöyle başlatın:
+1. Uygulamayı bilgisayarda yukarıdaki gibi başlatın.
+2. Sağ üstteki **telefon simgesine** tıklayın, çıkan **QR kodu** telefonun kamerasıyla okutun.
+3. İsterseniz telefonda tarayıcı menüsünden **“Ana Ekrana Ekle”** deyin; uygulama simgesiyle açılır.
 
-```bash
-HOST=0.0.0.0 node server.js           # macOS / Linux
-set HOST=0.0.0.0 && node server.js    # Windows (cmd)
-```
+Telefon ile bilgisayar **aynı Wi-Fi**'da olmalı ve bilgisayardaki uygulama penceresi açık kalmalı.
+İlk açılışta Windows “erişime izin ver” diye sorarsa **İzin ver**'e basın (Mac'te “Gelen bağlantılara
+izin ver” → İzin Ver). Telefon bağlanamıyorsa Windows'ta Wi-Fi ağının **Özel ağ** olarak ayarlı olduğundan
+emin olun.
 
-Sonra telefondan `http://<bilgisayarın-IP-adresi>:3000` adresini açın. Port için `PORT=8080` gibi
-bir değişken de verebilirsiniz.
+Telefon erişimini istemiyorsanız uygulamayı `node server.js --open` ile başlatın; o zaman yalnızca
+bu bilgisayardan açılır. Port değiştirmek için `PORT=8080` ortam değişkeni kullanılabilir.
 
 ## Hesaplamalar nasıl yapılıyor?
 
@@ -108,4 +111,5 @@ test/                     node:test birim testleri
 ```
 
 Grafik kütüphanesi: [TradingView Lightweight Charts™](https://www.tradingview.com/lightweight-charts/)
-(Apache 2.0, `public/vendor/` içinde).
+(Apache 2.0) ve QR kod: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT),
+ikisi de `public/vendor/` içinde.

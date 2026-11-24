@@ -42,3 +42,29 @@ test('bilinmeyen API yolu 404', async () => {
   const r = await fetch(base + '/api/yok');
   assert.equal(r.status, 404);
 });
+
+test('telefon erişimi: LAN adresleri sıralanır, sanal/yerel arayüzler geride kalır', async () => {
+  const { lanAddresses } = await import('../server.js');
+  const ips = lanAddresses({
+    lo: [{ family: 'IPv4', address: '127.0.0.1', internal: true }],
+    'vEthernet (WSL)': [{ family: 'IPv4', address: '172.20.0.1', internal: false }],
+    docker0: [{ family: 'IPv4', address: '172.17.0.1', internal: false }],
+    'Wi-Fi': [{ family: 'IPv4', address: '192.168.1.23', internal: false }, { family: 'IPv6', address: 'fe80::1', internal: false }],
+    eth9: [{ family: 4, address: '169.254.10.10', internal: false }],
+  });
+  assert.equal(ips[0], '192.168.1.23');
+  assert.ok(!ips.includes('127.0.0.1'));
+  assert.ok(!ips.includes('169.254.10.10'));
+});
+
+test('/api/info: LAN modu kapalıyken adres vermez', async () => {
+  const info = await (await fetch(base + '/api/info')).json();
+  assert.deepEqual(info, { lan: false, urls: [] });
+  const lanServer = createServer({ lan: true });
+  await new Promise((r) => lanServer.listen(0, '127.0.0.1', r));
+  const port = lanServer.address().port;
+  const info2 = await (await fetch(`http://127.0.0.1:${port}/api/info`)).json();
+  assert.equal(info2.lan, true);
+  for (const u of info2.urls) assert.match(u, new RegExp(`^http://[\\d.]+:${port}/$`));
+  await new Promise((r) => lanServer.close(r));
+});
