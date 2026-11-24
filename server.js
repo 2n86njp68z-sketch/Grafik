@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Grafik — yerel web sunucusu.
-//   node server.js          -> http://localhost:3000
-//   node server.js --open   -> tarayıcıyı da açar
-// Ortam değişkenleri: PORT (varsayılan 3000), HOST (varsayılan 127.0.0.1; telefondan erişim için 0.0.0.0)
+//   node server.js               -> http://localhost:3000 (yalnızca bu bilgisayar)
+//   node server.js --open        -> tarayıcıyı da açar
+//   node server.js --lan         -> aynı Wi-Fi'daki telefon/tabletlerden de erişilebilir
+// Ortam değişkenleri: PORT (varsayılan 3000), HOST (varsayılan 127.0.0.1, --lan ile 0.0.0.0)
 
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
@@ -54,9 +56,31 @@ function sendJson(req, res, status, obj, maxAge = 0) {
   });
 }
 
-async function handleApi(req, res, url) {
+/** Telefonun bağlanabileceği yerel ağ (LAN) IPv4 adresleri, en olası olan başta. */
+export function lanAddresses(ifaces = os.networkInterfaces()) {
+  const virtual = /vmware|virtualbox|vbox|docker|veth|^br-|vethernet|hyper-v|wsl|tailscale|zerotier|utun|^tun|^tap|loopback/i;
+  const rank = (ip, name) =>
+    (ip.startsWith('192.168.') ? 0 : ip.startsWith('10.') ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ? 2 : 3) +
+    (virtual.test(name) ? 10 : 0);
+  const out = [];
+  for (const [name, list] of Object.entries(ifaces)) {
+    for (const a of list || []) {
+      const v4 = a.family === 'IPv4' || a.family === 4;
+      if (!v4 || a.internal || a.address.startsWith('169.254.')) continue;
+      out.push({ ip: a.address, r: rank(a.address, name) });
+    }
+  }
+  return [...new Set(out.sort((a, b) => a.r - b.r).map((x) => x.ip))];
+}
+
+async function handleApi(req, res, url, opts) {
   const route = url.pathname;
   try {
+    if (route === '/api/info') {
+      const port = req.socket.localPort;
+      const urls = opts.lan ? lanAddresses().map((ip) => `http://${ip}:${port}/`) : [];
+      return sendJson(req, res, 200, { lan: !!opts.lan, urls });
+    }
     if (route === '/api/daily' || route === '/api/intraday') {
       const symbol = url.searchParams.get('symbol');
       if (!validSymbol(symbol)) return sendJson(req, res, 400, { error: 'Geçersiz sembol' });
@@ -91,11 +115,11 @@ function serveStatic(req, res, url) {
   });
 }
 
-export function createServer() {
+export function createServer(opts = {}) {
   return http.createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, 'Method not allowed');
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);
+    if (url.pathname.startsWith('/api/')) return handleApi(req, res, url, opts);
     return serveStatic(req, res, url);
   });
 }
@@ -111,10 +135,11 @@ function openBrowser(url) {
 }
 
 function start() {
-  const host = process.env.HOST || '127.0.0.1';
+  const lan = process.argv.includes('--lan') || process.env.HOST === '0.0.0.0';
+  const host = process.env.HOST || (lan ? '0.0.0.0' : '127.0.0.1');
   const basePort = Number(process.env.PORT) || 3000;
   const wantOpen = process.argv.includes('--open');
-  const server = createServer();
+  const server = createServer({ lan: lan && (host === '0.0.0.0' || host === '::') });
   let port = basePort;
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE' && port < basePort + 20) {
@@ -129,8 +154,16 @@ function start() {
     const url = `http://localhost:${port}`;
     console.log('');
     console.log('  Grafik çalışıyor  ->  ' + url);
-    if (host === '0.0.0.0') console.log('  (Aynı ağdaki telefondan: http://<bilgisayarın-IP-adresi>:' + port + ')');
-    console.log('  Kapatmak için bu pencerede Ctrl+C');
+    if (lan) {
+      const ips = lanAddresses();
+      if (ips.length) {
+        console.log('');
+        console.log('  Telefondan açmak için (aynı Wi-Fi):  http://' + ips[0] + ':' + port);
+        console.log('  ya da uygulamadaki telefon simgesine tıklayıp QR kodu okutun.');
+      }
+    }
+    console.log('');
+    console.log('  Bu pencere açık kaldığı sürece uygulama çalışır. Kapatmak için Ctrl+C.');
     console.log('');
     if (wantOpen) openBrowser(url);
   });

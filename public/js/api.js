@@ -24,5 +24,6 @@ export const api = {
   catalog: () => getJson('data/catalog.json', 24 * 3600e3),
   daily: (symbol) => getJson(`api/daily?symbol=${encodeURIComponent(symbol)}`, 5 * 60e3),
   intraday: (symbol, range) => getJson(`api/intraday?symbol=${encodeURIComponent(symbol)}&range=${range}`, 60e3),
+  info: () => getJson('api/info', 0),
   search: (q) => getJson(`api/search?q=${encodeURIComponent(q)}`, 10 * 60e3),
 };

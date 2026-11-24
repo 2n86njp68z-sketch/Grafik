@@ -6,6 +6,7 @@ import {
 import * as F from './format.js';
 import { api } from './api.js';
 import { PriceChart } from './chart.js';
+import qrcode from '../vendor/qrcode.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -970,12 +971,81 @@ async function refresh() {
 }
 
 // ---------------------------------------------------------------------------
+// Telefondan aç (QR kod)
+// ---------------------------------------------------------------------------
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function qrSvg(text) {
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const quiet = 4;
+  const size = n + quiet * 2;
+  let d = '';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('shape-rendering', 'crispEdges');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Telefonda açmak için QR kod');
+  const bg = document.createElementNS(NS, 'rect');
+  bg.setAttribute('width', size);
+  bg.setAttribute('height', size);
+  bg.setAttribute('fill', '#ffffff');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', '#000000');
+  svg.append(bg, path);
+  return svg;
+}
+
+async function openPhoneDialog() {
+  const dlg = $('phoneDlg');
+  const box = $('qrBox');
+  const urlEl = $('phoneUrl');
+  box.textContent = '';
+  urlEl.textContent = 'Adres alınıyor…';
+  if (!dlg.open) dlg.showModal();
+  let info = { lan: false, urls: [] };
+  try { info = await api.info(); } catch { /* sunucuya ulaşılamadı */ }
+  const ok = !!(info.lan && info.urls.length);
+  $('phoneSteps').hidden = !ok;
+  $('phoneNote').hidden = !ok;
+  $('phoneOff').hidden = ok || info.lan;
+  if (!ok) {
+    urlEl.textContent = info.lan ? 'Bilgisayarın ağ adresi bulunamadı. Wi-Fi\'a bağlı mı?' : '';
+    return;
+  }
+  const clean = (u) => u.replace(/\/$/, '');
+  box.append(qrSvg(info.urls[0] + location.hash));
+  urlEl.textContent = clean(info.urls[0]);
+  if (info.urls.length > 1) {
+    const sm = document.createElement('small');
+    sm.textContent = 'Olmazsa: ' + info.urls.slice(1).map(clean).join('  ·  ');
+    urlEl.append(sm);
+  }
+}
+
+function bindPhone() {
+  if (!LOCAL_HOSTS.has(location.hostname)) return; // telefondan açılmışsa gösterme
+  $('phoneBtn').hidden = false;
+  $('phoneBtn').addEventListener('click', openPhoneDialog);
+  $('phoneDlg').addEventListener('click', (e) => { if (e.target === $('phoneDlg')) $('phoneDlg').close(); });
+}
+
+// ---------------------------------------------------------------------------
 
 async function init() {
   applyStoredTheme();
   buildRangeButtons();
   bindControls();
   bindList();
+  bindPhone();
   chart = new PriceChart($('chart'), { onClick: onChartClick, onCrosshair: renderLegend });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => chart.applyTheme());
   try {
