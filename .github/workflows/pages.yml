@@ -1,14 +1,14 @@
 # Uygulamayı GitHub Pages'te yayınlar: https://<kullanıcı>.github.io/Grafik/
 # Verileri Yahoo Finance'ten çekip hazır JSON dosyaları olarak üretir (scripts/build-static.mjs)
 # ve gh-pages branch'ine yazar; GitHub Pages o branch'i yayınlar.
-# Hafta içi gün boyunca 2 saatte bir (ABD kapanışından sonra da), hafta sonu günde bir güncellenir.
+# Hafta içi gün boyunca saatte bir (ABD kapanışından sonra da), hafta sonu günde bir güncellenir.
 name: Web sitesini güncelle
 
 on:
   push:
   schedule:
-    - cron: '23 6-22/2 * * 1-5'   # hafta içi 06:23–22:23 UTC (TR 09:23–01:23), 2 saatte bir
-    - cron: '23 12 * * 0,6'       # hafta sonu günde bir (kripto için)
+    - cron: '17 6-22 * * 1-5'   # hafta içi 06:17–22:17 UTC (TR 09:17–01:17), saatte bir
+    - cron: '17 12 * * 0,6'     # hafta sonu günde bir (kripto için)
   workflow_dispatch:
 
 permissions:
@@ -26,17 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@v4
       - name: Zamanlanmış güncellemeyi canlı tut
         # GitHub, 60 gün yeni commit gelmeyen açık repolarda zamanlanmış iş akışlarını durdurur.
-        # Bu iş akışını "etkinleştir" çağrısı o sayacı sıfırlar; commit gerekmez.
+        # Son commit 40 günden eskiyse iş akışını "etkinleştir" çağrısı o sayacı sıfırlar; commit gerekmez.
+        if: github.event_name == 'schedule'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsS -X PUT -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/pages.yml/enable" \
-            && echo "Zamanlayıcı yenilendi"
-      - uses: actions/checkout@v4
+          age=$(( ($(date +%s) - $(git log -1 --format=%ct)) / 86400 ))
+          echo "Son commit $age gün önce"
+          if [ "$age" -ge 40 ]; then
+            curl -fsS -X PUT -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/pages.yml/enable" \
+              && echo "Zamanlayıcı yenilendi"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22

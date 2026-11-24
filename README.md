@@ -8,7 +8,7 @@ ABD ve Borsa İstanbul hisseleri, endeksler, altın, gümüş ve diğer emtialar
 
 Kurulum yok; telefondan da bilgisayardan da linke dokunup açın. Telefonda tarayıcı menüsünden
 **“Ana Ekrana Ekle”** derseniz uygulama gibi simgesiyle açılır. Veriler hafta içi gün boyunca
-2 saatte bir, hafta sonu günde bir otomatik güncellenir (sayfanın altında son güncelleme saati yazar).
+saatte bir, hafta sonu günde bir otomatik güncellenir (sayfanın altında son güncelleme saati yazar).
 
 ![Ekran görüntüsü](docs/ekran.png)
 
