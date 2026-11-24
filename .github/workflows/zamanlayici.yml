@@ -21,14 +21,16 @@ jobs:
           h=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
           curl -fsS -X PUT "${h[@]}" "$API/disable" && echo "kapatıldı" || true
           sleep 15
-          # Yeniden açma başarısız kalırsa site güncellenmez: birkaç kez dene
-          for i in 1 2 3 4 5 6; do
-            curl -fsS -X PUT "${h[@]}" "$API/enable" && break
+          # Yeniden açma başarısız kalırsa site güncellenmez: durum "active" olana kadar dene
+          # (API'nin gösterdiği durum birkaç saniye geriden gelebilir)
+          for i in $(seq 1 12); do
+            curl -fsS -X PUT "${h[@]}" "$API/enable" || true
             sleep 10
+            state=$(curl -fsS "${h[@]}" "$API" | jq -r .state)
+            echo "Durum: $state"
+            [ "$state" = "active" ] && exit 0
           done
-          state=$(curl -fsS "${h[@]}" "$API" | jq -r .state)
-          echo "Durum: $state"
-          [ "$state" = "active" ]
+          exit 1
       - name: Hemen bir güncelleme başlat
         run: |
           curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \

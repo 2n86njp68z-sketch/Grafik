@@ -1,13 +1,13 @@
 # Uygulamayı GitHub Pages'te yayınlar: https://<kullanıcı>.github.io/Grafik/
 # Verileri Yahoo Finance'ten çekip hazır JSON dosyaları olarak üretir (scripts/build-static.mjs)
 # ve gh-pages branch'ine yazar; GitHub Pages o branch'i yayınlar.
-# Hafta içi gün boyunca saatte bir (ABD kapanışından sonra da), hafta sonu günde bir güncellenir.
+# Hafta içi saatte bir (gece de: vadeli emtialar neredeyse 24 saat işlem görür), hafta sonu günde bir güncellenir.
 name: Web sitesini güncelle
 
 on:
   push:
   schedule:
-    - cron: '17 6-22 * * 1-5'   # hafta içi 06:17–22:17 UTC (TR 09:17–01:17), saatte bir
+    - cron: '17 * * * 1-5'      # hafta içi her saatin 17. dakikası (UTC)
     - cron: '17 12 * * 0,6'     # hafta sonu günde bir (kripto için)
   workflow_dispatch:
 
