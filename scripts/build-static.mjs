@@ -28,23 +28,36 @@ function copyDir(src, dst) {
   }
 }
 
-/** Günlük veriyi küçült: tarihleri gün farkı olarak, temettü yoksa a'yı hiç yazma. */
-function packDaily(d) {
+// Günlük veri iki dosyaya bölünür ki her güncellemede yalnızca küçük dosyalar değişsin
+// (gh-pages branch'i şişmesin): geçen ayın başından önceki geçmiş (d/, ayda bir değişir)
+// ve son günler + bilgiler (r/, her seferinde değişir). Temettü düzeltmeli değerler
+// gönderilmez; istemci faktörlerden hesaplar (calc.js applyFactors), böylece yeni bir
+// temettü geçmiş dosyasını değiştirmez.
+const now = new Date();
+const CUT = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 10);
+
+function packKeys(keys) {
   const dk = [];
   let prev = null;
-  for (const k of d.k) {
+  for (const k of keys) {
     const s = Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10)) / 86400000;
     dk.push(prev == null ? 0 : s - prev);
     prev = s;
   }
+  return { k0: keys[0] || null, dk };
+}
+
+function packDaily(d) {
+  let split = 0;
+  while (split < d.k.length && d.k[split] < CUT) split++;
   const c = d.c.map(r6);
-  const a = d.a.map(r6);
-  const sameA = a.every((v, i) => v === c[i]);
-  return {
-    v: 1, symbol: d.symbol, name: d.name, currency: d.currency, type: d.type, exchange: d.exchange, tz: d.tz,
-    k0: d.k[0], dk, c, ...(sameA ? {} : { a }), divs: d.divs, splits: d.splits, fixes: d.fixes,
-    price: d.price, priceTime: d.priceTime,
+  const hist = { v: 2, ...packKeys(d.k.slice(0, split)), c: c.slice(0, split) };
+  const rec = {
+    v: 2, symbol: d.symbol, name: d.name, currency: d.currency, type: d.type, exchange: d.exchange, tz: d.tz,
+    cut: CUT, ...packKeys(d.k.slice(split)), c: c.slice(split), fe: d.fe, divs: d.divs, splits: d.splits,
+    fixes: d.fixes, price: d.price, priceTime: d.priceTime,
   };
+  return { hist, rec };
 }
 
 /** 5 günlük gün içi veriden hem 1H (5d) hem 1G (son gün) görünümü. */
@@ -81,6 +94,7 @@ async function main() {
   fs.rmSync(OUT, { recursive: true, force: true });
   copyDir(path.join(ROOT, 'public'), OUT);
   fs.mkdirSync(path.join(OUT, 'data', 'd'), { recursive: true });
+  fs.mkdirSync(path.join(OUT, 'data', 'r'), { recursive: true });
   fs.mkdirSync(path.join(OUT, 'data', 'i'), { recursive: true });
 
   const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'data', 'catalog.json'), 'utf8'));
@@ -97,7 +111,9 @@ async function main() {
   const doSymbol = async (sym) => {
     try {
       const daily = await getDaily(sym);
-      write(`d/${staticFileName(sym)}.json`, packDaily(daily));
+      const { hist, rec } = packDaily(daily);
+      write(`d/${staticFileName(sym)}.json`, hist);
+      write(`r/${staticFileName(sym)}.json`, rec);
       if (daily.currency && !['USD', 'TRY', 'GBp', 'ILA', 'ZAc'].includes(daily.currency)) extraFx.add(`${daily.currency}=X`);
       try {
         const intra = await getIntraday(sym, '5d');

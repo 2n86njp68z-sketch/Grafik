@@ -108,7 +108,7 @@ node scripts/build-static.mjs site   # web (GitHub Pages) sürümünü site/ kla
 Yeni halka arzları eklemek için `scripts/build-catalog.mjs` içindeki listeye sembolü ekleyip
 `npm run catalog` çalıştırın.
 
-Web sürümü `.github/workflows/pages.yml` ile GitHub Actions'ta derlenip GitHub Pages'e yüklenir.
+Web sürümü `.github/workflows/pages.yml` ile GitHub Actions'ta derlenip `gh-pages` branch'ine yazılır; GitHub Pages o branch'i yayınlar.
 
 ```
 server.js                 Yerel web sunucusu (bağımlılıksız Node.js)

@@ -35,7 +35,11 @@ const live = {
 };
 
 const stat = {
-  daily: (symbol) => getJson(`data/d/${staticFileName(symbol)}.json`, 10 * 60e3, unpackDaily),
+  daily: (symbol) => {
+    const f = staticFileName(symbol);
+    return Promise.all([getJson(`data/d/${f}.json`, 60 * 60e3), getJson(`data/r/${f}.json`, 10 * 60e3)])
+      .then(([hist, rec]) => unpackDaily(hist, rec));
+  },
   intraday: (symbol, range) => getJson(`data/i/${staticFileName(symbol)}.json`, 10 * 60e3).then((j) => {
     const v = unpackIntraday(j?.[range]);
     if (!v || !v.t.length) throw new Error('Bu dönem için gün içi veri yok');

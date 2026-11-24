@@ -173,6 +173,7 @@ export function processDaily(res) {
     c: C.map(round7),
     a: A.map(round7),
     divs,
+    fe: factorEvents.map(([i, f]) => [K[i], round7(f)]), // [ex-date, faktör]: o günden önceki kapanışlar f ile çarpılır
     splits,
     fixes,
     price: meta.regularMarketPrice,
@@ -397,17 +398,41 @@ export function staticFileName(sym) {
   return String(sym).replace(/[^A-Za-z0-9.-]/g, (c) => '_' + c.charCodeAt(0).toString(16));
 }
 
-/** Sıkıştırılmış günlük veriyi (k0 + gün farkları, a yoksa = c) açar. */
-export function unpackDaily(p) {
-  if (!p || !p.dk) return p;
-  const k = new Array(p.dk.length);
+function expandKeys(p) {
+  const k = new Array(p?.dk?.length || 0);
+  if (!k.length) return k;
   let day = keyToSec(p.k0) / 86400;
-  for (let i = 0; i < p.dk.length; i++) {
+  for (let i = 0; i < k.length; i++) {
     day += p.dk[i];
     k[i] = secToKey(day * 86400);
   }
-  const { dk, k0, ...rest } = p;
-  return { ...rest, k, a: p.a || p.c.slice(), t: [] };
+  return k;
+}
+
+/** Kapanışlara temettü faktörlerini uygular (processDaily ile aynı sonuç). */
+export function applyFactors(k, c, fe = []) {
+  const a = new Array(c.length);
+  let cum = 1;
+  for (let j = c.length - 1, e = fe.length - 1; j >= 0; j--) {
+    while (e >= 0 && fe[e][0] > k[j]) { cum *= fe[e][1]; e--; }
+    a[j] = c[j] * cum;
+  }
+  return a;
+}
+
+/**
+ * Statik sitenin günlük verisi iki dosyadır: uzun geçmiş (ayda bir değişir) ve son günler
+ * + bilgiler (her güncellemede değişir). İkisini birleştirip sunucunun döndürdüğü biçime çevirir.
+ */
+export function unpackDaily(hist, rec) {
+  const hk = expandKeys(hist);
+  const rk = expandKeys(rec);
+  let n = hk.length;
+  if (rk.length) while (n > 0 && hk[n - 1] >= rk[0]) n--;
+  const k = hk.slice(0, n).concat(rk);
+  const c = (hist?.c || []).slice(0, n).concat(rec.c || []);
+  const { dk, k0, c: _c, fe, cut, v, ...meta } = rec;
+  return { ...meta, k, c, a: applyFactors(k, c, fe), t: [] };
 }
 
 export function unpackIntraday(p) {
