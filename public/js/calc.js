@@ -154,6 +154,16 @@ export function processDaily(res, ca = null, dayRet = null) {
   const divBasis = new Map();
   // j günündeki, o ana kadar atanmış düzeltmeler uygulandıktan sonra kalan hareket
   const residual = (j) => C[j] / C[j - 1] / (jumpAt.get(j) || 1);
+  const addJump = (j, f) => jumpAt.set(j, (jumpAt.get(j) || 1) * f);
+  // Borsa İstanbul günlük sınırının izin vermediği hareket mi? (BIST dışında her sıçrama sayılır)
+  const impossible = (j, r) => {
+    if (!bist) return true;
+    const tight = K[j] >= BIST_LIMIT10_FROM && daysApart(K[j], K[j - 1]) <= 5;
+    return tight ? r < 0.885 || r > 1.13 : r < 0.79 || r > 1.26;
+  };
+  // Gerçek günlük değişimi (İş Yatırım ham fiyatı) bilinmesi işe yarayacak günler (derleme bunları çeker)
+  const need = new Set();
+  const hint = (j) => { const m = dayRet?.[K[j]]; if (m > 0.7 && m < 1.4) return m; if (bist && !(K[j] in (dayRet || {}))) need.add(K[j]); return null; };
 
   // --- Resmi sermaye olayları (İş Yatırım): aynı güne düşenler birleştirilir ---
   const official = Array.isArray(ca) && ca.length
@@ -167,46 +177,65 @@ export function processDaily(res, ca = null, dayRet = null) {
       if (Math.abs(lf) < 0.005) continue; // fiyatı etkilemeyen olay (ör. rüçhan hakkı kısıtlanarak)
       const iE = firstIndexAtOrAfter(K, e.k);
       if (iE <= 0 || iE >= n) continue; // veri başlamadan önce ya da henüz gerçekleşmemiş
-      // 1) Yahoo fiyatında bu olaya uyan, düzeltilmemiş bir düşüş/sıçrama var mı? Uygulandığında kalan
-      // hareket hem olayın yarısından küçük hem de bir günlük olağan hareket kadar olmalı. Küçük
-      // olaylar normal günlerle karışmasın diye yalnızca olay günü ±1 gün aranır.
-      const small = Math.abs(lf) < CA_SMALL;
-      let best = -1, bestErr = Math.min(CA_TOL, Math.abs(lf) / 2);
-      for (let j = Math.max(1, iE - (small ? 1 : CA_BEFORE)); j <= Math.min(n - 1, iE + (small ? 1 : CA_AFTER)); j++) {
-        const err = Math.abs(Math.log(residual(j)) - lf);
-        if (err < bestErr) { best = j; bestErr = err; }
+      const ys = splitEvents.find((y) => !y.used && daysApart(y.k, e.k) <= SPLIT_MATCH_DAYS);
+      // 1) Yahoo fiyatında bu olaydan kalan, sınırın izin vermediği bir sıçrama var mı? Yahoo olayı hiç
+      // uygulamamış (beklenen f) ya da kendi kaydındaki yanlış oranla kısmen uygulamış (f·R) olabilir.
+      const cands = [e.f];
+      if (ys && Math.abs(Math.log(e.f * ys.R)) > 0.01) cands.push(e.f * ys.R);
+      let best = null;
+      for (const x of cands) {
+        const lx = Math.log(x);
+        const near = Math.abs(lx) < CA_SMALL; // küçük olay: yalnız olay günü ±1
+        for (let j = Math.max(1, iE - (near ? 1 : CA_BEFORE)); j <= Math.min(n - 1, iE + (near ? 1 : CA_AFTER)); j++) {
+          const r = residual(j);
+          const err = Math.abs(Math.log(r) - lx);
+          if (err < Math.min(CA_TOL, Math.abs(lx) / 2) && impossible(j, r) && (!best || err < best.err)) best = { j, x, err };
+        }
       }
-      if (best >= 0) {
-        jumpAt.set(best, (jumpAt.get(best) || 1) * e.f);
-        const ysj = splitEvents.find((y) => !y.used && daysApart(y.k, K[best]) <= SPLIT_MATCH_DAYS);
-        if (ysj) ysj.used = true;
+      if (best) {
+        addJump(best.j, best.x);
+        if (ys) ys.used = true;
         fixes.push({ type: 'ca', k: e.k, t: e.t, factor: round7(e.f) });
         continue;
       }
-      // 2) Sıçrama yok: Yahoo olayı kendi bölünme kaydıyla uygulamışsa oran farkını düzelt
-      const ys = splitEvents.find((y) => !y.used && daysApart(y.k, e.k) <= SPLIT_MATCH_DAYS);
+      // 2) Sıçrama yok ama Yahoo'nun kaydı var: Yahoo 1/R uyguladı; resmi oranla farkını düzelt
       if (ys) {
         ys.used = true;
-        const corr = e.f * ys.R; // Yahoo 1/R uyguladı; resmi oran f
+        const corr = e.f * ys.R;
         const iy = firstIndexAtOrAfter(K, ys.k);
         if (Math.abs(Math.log(corr)) > 0.01 && iy > 0 && iy < n) {
-          jumpAt.set(iy, (jumpAt.get(iy) || 1) * corr);
+          addJump(iy, corr);
           fixes.push({ type: 'ca', k: e.k, t: e.t, factor: round7(e.f) });
         }
+        continue;
       }
-      // 3) Ne sıçrama ne Yahoo kaydı: Yahoo fiyatı zaten düzeltmiş, dokunma
+      // 3) Ne sıçrama ne kayıt. Büyük olayda Yahoo fiyatı sessizce düzeltmiş demektir. Küçük/orta olayda
+      // olay günü olağan bir günden ayırt edilemez: o günün gerçek değişimi (İş Yatırım ham fiyatı)
+      // biliniyorsa Yahoo'nun o günkü hareketi düzeltilmemiş (f·m) mi düzeltilmiş (m) mi ona göre karar ver.
+      if (Math.abs(lf) < Math.log(1.3)) {
+        const m = dayRet?.[K[iE]];
+        if (m > 0.7 && m < 1.4) {
+          const r = residual(iE);
+          if (Math.abs(Math.log(r / (e.f * m))) < Math.abs(Math.log(r / m))) {
+            addJump(iE, e.f);
+            fixes.push({ type: 'ca', k: e.k, t: e.t, factor: round7(e.f) });
+          }
+        } else if (!(K[iE] in (dayRet || {}))) need.add(K[iE]);
+      }
     }
   }
 
-  const addJump = (j, f) => jumpAt.set(j, (jumpAt.get(j) || 1) * f);
   for (let j = 1; j < n; j++) {
     const r = residual(j);
     if (r > GLITCH_RATIO || r < 1 / GLITCH_RATIO) {
       const lg = Math.log10(r);
-      // 10'un kuvvetine yakınsa (birim/sıfır hatası) tam kuvveti kullan
-      const f = Math.abs(lg - Math.round(lg)) < 0.15 ? Math.pow(10, Math.round(lg)) : r;
+      // 10'un kuvvetine yakınsa (birim/sıfır hatası) tam kuvveti kullan; değilse o günün gerçek
+      // değişimi biliniyorsa onu koru
+      const p10 = Math.abs(lg - Math.round(lg)) < 0.15;
+      const m = p10 ? null : hint(j);
+      const f = p10 ? Math.pow(10, Math.round(lg)) : m ? r / m : r;
       addJump(j, f);
-      fixes.push({ type: 'rescale', k: K[j], factor: round7(f) });
+      fixes.push({ type: 'rescale', k: K[j], factor: round7(f), ...(m ? { exact: true } : {}) });
       continue;
     }
     // Bölünme kaydıyla eşleştirme yalnızca büyük sıçramalarda (normal bir gün yanlışlıkla eşleşmesin)
@@ -221,10 +250,9 @@ export function processDaily(res, ca = null, dayRet = null) {
     }
     const [lo, hi] = K[j] >= BIST_LIMIT10_FROM && daysApart(K[j], K[j - 1]) <= 5 ? BIST_TIGHT : BIST_WIDE;
     if (bist && (r < lo || r > hi)) {
-      const m = dayRet?.[K[j]];
-      const exact = m > 0.7 && m < 1.4; // o günün gerçek değişimi biliniyorsa korunur
-      addJump(j, exact ? r / m : r);
-      fixes.push({ type: 'corp', k: K[j], factor: round7(exact ? r / m : r), ...(exact ? { exact: true } : {}) });
+      const m = hint(j); // o günün gerçek değişimi biliniyorsa korunur
+      addJump(j, m ? r / m : r);
+      fixes.push({ type: 'corp', k: K[j], factor: round7(m ? r / m : r), ...(m ? { exact: true } : {}) });
       continue;
     }
     const r2 = j + 1 < n ? residual(j + 1) : 1;
@@ -299,6 +327,7 @@ export function processDaily(res, ca = null, dayRet = null) {
     splits,
     fixes,
     src: official ? 'isyatirim' : null, // temettü / sermaye olaylarının kaynağı
+    need: [...need].sort(), // gerçek günlük değişimi bilinirse daha doğru düzeltilecek günler
     price: meta.regularMarketPrice,
     priceTime: meta.regularMarketTime,
   };

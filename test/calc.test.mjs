@@ -145,15 +145,33 @@ test('İş Yatırım resmi olayı: Yahoo kaydırılmış sıçrama resmi oranla 
   close(d.a[0] / d.c[0], 0.99); // resmi temettü ayar oranı
 });
 
-test('İş Yatırım küçük olay: düşüş olay gününde görünüyorsa uygulanır, Yahoo zaten düzelttiyse uygulanmaz', () => {
+test('İş Yatırım küçük olay: olağan günden ayırt edilemez; o günün gerçek değişimine göre karar verilir', () => {
   const ca = [{ k: '2025-03-10', t: '02', f: 1 / 1.1 }]; // %10 bedelsiz
   const keys = ['2025-03-06', '2025-03-07', '2025-03-10', '2025-03-11'];
-  const raw = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [100, 101, 92.3, 93] }), ca);
+  // Gerçek değişim bilinmiyorsa dokunulmaz, o gün "gerekli" olarak bildirilir (derleme İş Yatırım'dan çeker)
+  const unknown = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [100, 101, 92.3, 93] }), ca);
+  assert.deepEqual(unknown.c, [100, 101, 92.3, 93]);
+  assert.deepEqual(unknown.need, ['2025-03-10']);
+  // O gün gerçek değişim +%0,5: Yahoo'daki -%8,6 düzeltilmemiş bedelsizdir → uygulanır
+  const dayRet = { '2025-03-10': 1.0052 };
+  const raw = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [100, 101, 92.3, 93] }), ca, dayRet);
   close(raw.c[1], 101 / 1.1);
   assert.equal(raw.fixes[0].type, 'ca');
-  const adjusted = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [90.9, 91.8, 92.3, 93] }), ca);
+  // Yahoo zaten düzeltmişse (o gün +%0,5 görünüyor) uygulanmaz
+  const adjusted = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [90.9, 91.8, 92.3, 93] }), ca, dayRet);
   assert.deepEqual(adjusted.c, [90.9, 91.8, 92.3, 93]);
   assert.deepEqual(adjusted.fixes, []);
+});
+
+test('İş Yatırım: Yahoo olayı kendi yanlış oranıyla kısmen uygulamışsa kalan kısım düzeltilir', () => {
+  // SEYKM 2022-09-22: resmi oran 0,6949; Yahoo kaydı 1,0989 ile ölçeklemiş, fiyatta -%19,9 kalmış
+  const ca = [{ k: '2022-09-22', t: '09', f: 0.6949 }];
+  const d = processDaily(yahoo({
+    symbol: 'SEYKM.IS', keys: ['2022-09-20', '2022-09-21', '2022-09-22', '2022-09-23'], closes: [5.3, 5.34, 4.28, 4.3],
+    splits: [['2022-09-22', 109.888886, 100]],
+  }), ca);
+  close(d.c[2] / d.c[1], 4.28 / (5.34 * 0.6949 * 1.09888886)); // o günün gerçek hareketi (+%5) korunur
+  assert.equal(d.fixes[0].type, 'ca');
 });
 
 test('BIST dışı: gerçek sert düşüş (ör. bilanço sonrası %52) düzeltilmez', () => {

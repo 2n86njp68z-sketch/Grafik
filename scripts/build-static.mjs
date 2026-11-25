@@ -159,7 +159,7 @@ async function main() {
   isy.s = isy.s || {};
   await refreshIsy(isy, symbols.filter((s) => isyCode(s)));
   // Tahminle düzeltilen günlerin gerçek değişimi için ayrı süre (uç nokta yavaş; sonuçlar kalıcı)
-  const hintDeadline = Date.now() + (Number(process.env.ISY_HINT_SEC) || 180) * 1000;
+  const hintDeadline = Date.now() + (Number(process.env.ISY_HINT_SEC) || 300) * 1000;
   let hintsFetched = 0;
 
   const extraFx = new Set();
@@ -172,7 +172,7 @@ async function main() {
       // Resmi kayıtla açıklanamayan sıçramalar tahminle düzeltilir; o günün gerçek değişimini
       // İş Yatırım ham fiyatından bir kez alıp sakla (yoksa o gün değişim 0 sayılır)
       if (ca && Date.now() < hintDeadline) {
-        const need = daily.fixes.filter((f) => f.type === 'corp' && !(isyRec.dr && f.k in isyRec.dr)).map((f) => f.k).slice(0, 4);
+        const need = (daily.need || []).filter((k) => !(isyRec.dr && k in isyRec.dr)).slice(-6); // en yeniler önce
         if (need.length) {
           try {
             isyRec.dr = { ...(isyRec.dr || {}), ...(await fetchDayReturns(sym, need, ca)) };
