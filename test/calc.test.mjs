@@ -125,6 +125,37 @@ test('BIST ±%10 döneminde (2020-03-16 sonrası) iki günlük sınırı aşan h
   assert.deepEqual(quake.c, [160.6, 190.8]);
 });
 
+test('İş Yatırım resmi olayı: Yahoo kaydırılmış sıçrama resmi oranla düzeltilir, temettüler resmi kayıttan', () => {
+  // CCOLA: resmi bedelsiz 13.08.2024 (oran 1/11) ama Yahoo 1-12 Ağustos'u da 11'e bölmüş (sıçrama 1 Ağustos'ta)
+  const ca = [
+    { k: '2024-05-27', t: '04', f: 0.99, d: 7.8626 },
+    { k: '2024-08-13', t: '02', f: 1 / 11 },
+  ];
+  const d = processDaily(yahoo({
+    symbol: 'CCOLA.IS',
+    keys: ['2024-05-24', '2024-05-27', '2024-07-31', '2024-08-01', '2024-08-13', '2024-08-14'],
+    closes: [790, 780, 846, 78.27, 69.35, 67.75],
+    divs: [['2024-05-27', 0.715]], // Yahoo'nun temettüsü kullanılmaz
+  }), ca);
+  close(d.c[2], 846 / 11);
+  close(d.c[0], 790 / 11);
+  assert.deepEqual(d.fixes, [{ type: 'ca', k: '2024-08-13', t: '02', factor: 0.09090909 }]);
+  assert.equal(d.src, 'isyatirim');
+  assert.deepEqual(d.divs, [['2024-05-27', 7.8626]]);
+  close(d.a[0] / d.c[0], 0.99); // resmi temettü ayar oranı
+});
+
+test('İş Yatırım küçük olay: düşüş olay gününde görünüyorsa uygulanır, Yahoo zaten düzelttiyse uygulanmaz', () => {
+  const ca = [{ k: '2025-03-10', t: '02', f: 1 / 1.1 }]; // %10 bedelsiz
+  const keys = ['2025-03-06', '2025-03-07', '2025-03-10', '2025-03-11'];
+  const raw = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [100, 101, 92.3, 93] }), ca);
+  close(raw.c[1], 101 / 1.1);
+  assert.equal(raw.fixes[0].type, 'ca');
+  const adjusted = processDaily(yahoo({ symbol: 'TEST.IS', keys, closes: [90.9, 91.8, 92.3, 93] }), ca);
+  assert.deepEqual(adjusted.c, [90.9, 91.8, 92.3, 93]);
+  assert.deepEqual(adjusted.fixes, []);
+});
+
 test('BIST dışı: gerçek sert düşüş (ör. bilanço sonrası %52) düzeltilmez', () => {
   const d = processDaily(yahoo({
     symbol: 'AAPL', tz: 'America/New_York', currency: 'USD',

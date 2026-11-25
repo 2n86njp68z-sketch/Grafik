@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDaily, getIntraday } from '../lib/yahoo.js';
+import { fetchCorporateActions, isyCode, packCA, unpackCA } from '../lib/isyatirim.js';
 import { dateKey, lastIndexAtOrBefore, staticFileName } from '../public/js/calc.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,7 +57,7 @@ function packDaily(d) {
   const rec = {
     v: 2, symbol: d.symbol, name: d.name, currency: d.currency, type: d.type, exchange: d.exchange, tz: d.tz,
     cut: CUT, ...packKeys(d.k.slice(split)), c: c.slice(split), fe: d.fe, divs: d.divs, splits: d.splits,
-    fixes: d.fixes, price: d.price, priceTime: d.priceTime,
+    fixes: d.fixes, src: d.src, price: d.price, priceTime: d.priceTime,
   };
   return { hist, rec };
 }
@@ -81,6 +82,50 @@ function packIntraday(i5, daily) {
     '5d': pack(i5.t, i5.c, i5.a, i5.base),
     '1d': pack(i5.t.slice(from), i5.c.slice(from), i5.a.slice(from), base1),
   };
+}
+
+// --- İş Yatırım resmi sermaye olayları / temettüler (BIST hisseleri) ---
+// Olaylar nadiren değişir; her hissenin kaydı önceki yayından (data/isy.json) okunur ve her turda
+// yalnızca en eskileri, süre sınırı içinde yenilenir (siteyi yormamak için). Kaydı olmayan hisse
+// geçici olarak Yahoo verisi + tahminle işlenir.
+const ISY_MAX_AGE = 6 * 3600 * 1000;
+async function loadIsyCache() {
+  const local = process.env.ISY_CACHE; // test için yerel dosya
+  if (local && fs.existsSync(local)) return JSON.parse(fs.readFileSync(local, 'utf8'));
+  const repo = process.env.GITHUB_REPOSITORY;
+  const url = process.env.PREV_SITE_URL || (repo ? `https://${repo.split('/')[0].toLowerCase()}.github.io/${repo.split('/')[1]}/` : null);
+  if (url) {
+    try {
+      const r = await fetch(url + 'data/isy.json', { signal: AbortSignal.timeout(20000) });
+      if (r.ok) return await r.json();
+    } catch { /* ilk yayın ya da erişim hatası */ }
+  }
+  return { v: 1, s: {} };
+}
+
+async function refreshIsy(cache, symbols) {
+  const now = Date.now();
+  const stale = symbols.filter((s) => !(now - Date.parse(cache.s[s]?.at || 0) < ISY_MAX_AGE))
+    .sort((a, b) => Date.parse(cache.s[a]?.at || 0) - Date.parse(cache.s[b]?.at || 0));
+  const missing = symbols.filter((s) => !cache.s[s]).length;
+  const budgetSec = Number(process.env.ISY_BUDGET_SEC) || (missing > symbols.length / 2 ? 12 * 60 : 4 * 60);
+  const deadline = now + budgetSec * 1000;
+  let ok = 0, fail = 0, i = 0;
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    while (i < stale.length && Date.now() < deadline) {
+      const sym = stale[i++];
+      try {
+        const ca = await fetchCorporateActions(sym, { timeout: 30000 });
+        cache.s[sym] = { at: new Date().toISOString(), e: packCA(ca || []) };
+        ok++;
+      } catch {
+        fail++;
+        if (fail >= 15 && ok === 0) i = stale.length; // erişilemiyor: bu turda vazgeç
+      }
+    }
+  }));
+  const have = symbols.filter((s) => cache.s[s]).length;
+  console.log(`İş Yatırım: ${ok} hisse yenilendi, ${fail} hata; kayıtlı ${have}/${symbols.length} (eskimiş ${stale.length})`);
 }
 
 async function pool(items, n, fn) {
@@ -110,10 +155,15 @@ async function main() {
     fs.writeFileSync(path.join(OUT, 'data', rel), s);
   };
 
+  const isy = await loadIsyCache();
+  isy.s = isy.s || {};
+  await refreshIsy(isy, symbols.filter((s) => isyCode(s)));
+
   const extraFx = new Set();
   const doSymbol = async (sym) => {
     try {
-      const daily = await getDaily(sym);
+      const isyRec = isy.s[sym];
+      const daily = await getDaily(sym, { ca: isyRec?.e?.length ? unpackCA(isyRec.e) : null });
       const { hist, rec } = packDaily(daily);
       write(`d/${staticFileName(sym)}.json`, hist);
       write(`r/${staticFileName(sym)}.json`, rec);
@@ -153,6 +203,7 @@ async function main() {
     ...failed.flatMap((s) => ['d', 'r', 'i'].map((dir) => `data/${dir}/${staticFileName(s)}.json`)),
     ...failedIntra.map((s) => `data/i/${staticFileName(s)}.json`),
   ];
+  write('isy.json', isy);
   write('meta.json', { builtAt, symbols: symbols.length - failed.length, failed, failedFiles });
 
   const secs = ((Date.now() - t0) / 1000).toFixed(0);

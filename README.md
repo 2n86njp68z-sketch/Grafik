@@ -72,6 +72,16 @@ alındığı gün aynı hisseye yeniden yatırıldığı varsayımıyla elde edi
 (Yahoo'nun *Adj Close* değeriyle birebir aynı yöntem; birim testlerle doğrulanır).
 Bölünmeler ve bedelsiz sermaye artırımları fiyatlara zaten yansıtılmıştır.
 
+**BIST hisseleri: resmi temettü ve sermaye artırımı kayıtları (İş Yatırım).** Yahoo'nun BIST
+temettü ve bedelsiz/bedelli kayıtları eksik ya da hatalı olabildiği için bu bilgiler İş Yatırım'ın
+şirket kartındaki resmi kayıtlardan alınır. Her olayın resmi *fiyat ayar oranı* kullanılır:
+nakit temettüde `1 − temettü / önceki kapanış`, bedelsizde `1 / (1 + oran)`, bedelli artırımda
+teorik fiyata göre oran. Fiyatlar Yahoo'dan gelir; resmi olay Yahoo fiyatında düzeltilmemiş bir
+sıçramaya denk geliyorsa (Yahoo bazı bölünmeleri birkaç gün kaydırıyor) o gün resmi oranla
+düzeltilir, Yahoo zaten düzeltmişse dokunulmaz. Kayıtlar sitede her hisse için günde birkaç kez
+yenilenir (`data/isy.json`); İş Yatırım'a erişilemezse aşağıdaki tahmin yöntemine geri dönülür.
+Bu resmi bir API değildir; yalnızca kişisel kullanım içindir.
+
 **TL ↔ USD.** Her günün fiyatı, aynı günün (yoksa önceki son günün) USD/TRY kapanış kuruyla
 çevrilir. Gün içi grafiklerde gün içi kur kullanılır. USD/TRY verisi 3 Ocak 2005'ten başladığı için
 daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not olarak belirtir).
@@ -80,13 +90,14 @@ daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not o
 **kapanış**, bitiş için o tarihteki ya da önceki son kapanış alınır; kullanılan tarihler sonuçta yazar.
 1G görünümünde baz, bir önceki günün kapanışıdır.
 
-**Veri temizliği.** Yahoo verisindeki bilinen hatalar otomatik düzeltilir ve not olarak gösterilir:
+**Veri temizliği.** Yahoo verisindeki bilinen hatalar otomatik düzeltilir ve not olarak gösterilir
+(resmi kaydı olmayan ya da resmi kayıtla açıklanamayan durumlar için):
 - Bir günde 20 kattan fazla sıçrama (ör. bazı BIST hisselerinde 2005'teki 6 sıfır atılmasının
   düzeltilmemiş olması) önceki fiyatlar ölçeklenerek giderilir.
 - Yahoo'nun fiyata yansıtmadığı bölünme / bedelsiz sermaye artırımları: Yahoo'da bölünme kaydı varsa
   (tarihi kaymış olsa bile) kaydın tam oranı kullanılır. Kayıt yoksa, Borsa İstanbul'un günlük fiyat
   sınırının izin vermediği hareket bedelsiz / bedelli / bölünme / birleştirme kabul edilir ve önceki
-  fiyatlar o güne göre ölçeklenir (ör. CCOLA 01.08.2024, 1'e 11). Sınır 13 Mart 2020'den beri %10:
+  fiyatlar o güne göre ölçeklenir. Sınır 13 Mart 2020'den beri %10:
   bu dönemde tek günde %21'den fazla düşüş ya da %23'ten fazla yükseliş (Yahoo'nun bir günü atlamasına
   karşı iki günlük sınır payıyla); öncesinde (%20 sınır) ve uzun aralarda %40 düşüş / %70 yükseliş.
 - Herhangi bir piyasada ertesi gün geri dönen %70+ tek günlük sıçrama hatalı fiyat sayılır.
@@ -94,7 +105,8 @@ daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not o
 
 ### Bilinmesi gerekenler
 
-- Veriler **Yahoo Finance**'ten gelir; borsalarda ~15 dakikaya kadar gecikmeli olabilir.
+- Fiyatlar **Yahoo Finance**'ten gelir; borsalarda ~15 dakikaya kadar gecikmeli olabilir. BIST
+  hisselerinin temettü ve sermaye artırımı kayıtları **İş Yatırım**'dan alınır.
 - **Endeksler fiyat endeksidir** (temettü içermez). S&P 500 ve Russell 2000 için listede ayrıca
   *Toplam Getiri (TR)* versiyonları vardır; uygulama bunlara bağlantı verir. Diğer endekslerin temettü dahil
   getirisi için ETF'lerine bakın (ör. Nasdaq 100 → QQQ, Dow → DIA): ETF grafikleri temettü dahildir.
@@ -122,6 +134,7 @@ bir saat bekler, siteyi güncelletir ve kendini yeniden başlatır.
 ```
 server.js                 Yerel web sunucusu (bağımlılıksız Node.js)
 lib/yahoo.js              Yahoo Finance istemcisi + önbellek
+lib/isyatirim.js          İş Yatırım: BIST resmi temettü / sermaye artırımı kayıtları
 public/index.html         Arayüz
 public/style.css          Açık / koyu tema
 public/js/app.js          Uygulama mantığı (liste, dönemler, ölçüm, notlar)

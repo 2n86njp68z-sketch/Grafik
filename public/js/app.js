@@ -491,7 +491,10 @@ function renderNotes(view, cur, truncated, earliest) {
     if (c.length - 1 - i >= 20) add(`⚠️ Fiyat ${F.fmtDateKeyNumeric(D.daily.k[i])} tarihinden beri hiç değişmiyor; bu enstrüman işleme kapalı olabilir.`);
   }
   if (state.tr && !hasDivs() && (it.t === 'stock' || it.t === 'etf')) add('ℹ️ Bu enstrüman için temettü kaydı bulunmuyor; grafik fiyat getirisini gösterir.');
-  if (useAdj()) add(`✓ Toplam getiri: ${D.daily.divs.length} temettü ödemesi, ödendiği gün yeniden yatırılmış kabul edildi.`);
+  if (useAdj()) {
+    const src = D.daily.src === 'isyatirim' ? ' (temettü ve sermaye artırımı kayıtları: İş Yatırım)' : '';
+    add(`✓ Toplam getiri: ${D.daily.divs.length} temettü ödemesi, ödendiği gün yeniden yatırılmış kabul edildi${src}.`);
+  }
   if (cur !== D.native && !it.lockCur) {
     const fxNames = conversionPlan(D.native, cur).map((p) => 'USD/' + p.fx.replace('=X', ''));
     const conv = `${F.CUR_LABEL[cur] || cur} karşılığı, her günün ${fxNames.join(' ve ')} kuru ile hesaplanır.`;
@@ -512,10 +515,20 @@ function renderNotes(view, cur, truncated, earliest) {
   }
 }
 
+// İş Yatırım olay türleri (SHT_KODU)
+const CA_NAMES = {
+  '01': 'Bedelli sermaye artırımı', '02': 'Bedelsiz sermaye artırımı', '03': 'Bedelli ve bedelsiz sermaye artırımı',
+  '05': 'Bedelsiz sermaye artırımı ve temettü', '06': 'Bedelli sermaye artırımı ve temettü', '07': 'Sermaye artırımı (rüçhan hakkı kısıtlanarak)',
+  '08': 'Bedelli, bedelsiz sermaye artırımı ve temettü', '09': 'Bedelsiz sermaye artırımı (temettüden)', '78': 'Sermaye azaltımı',
+  '89': 'Bedelsiz pay ayrılması', '90': 'Birleşme', '98': 'İkincil halka arz',
+};
+
 function fixNote(f) {
   const day = F.fmtDateKeyNumeric(f.k);
   const shares = (r) => F.fmtNumber(r, Number.isInteger(r) ? 0 : 2);
   switch (f.type) {
+    case 'ca':
+      return `🔧 ${day}: ${CA_NAMES[f.t] || 'Sermaye değişikliği'}; önceki fiyatlar resmi ayar oranıyla (×${F.fmtNumber(f.factor, f.factor < 0.1 ? 4 : 3)}) düzeltildi (kaynak: İş Yatırım).`;
     case 'split':
       return `🔧 ${day}: Bölünme / bedelsiz (1 pay → ${shares(f.ratio)} pay) Yahoo verisinde fiyata yansıtılmamıştı; önceki fiyatlar buna göre düzeltildi.`;
     case 'corp':
