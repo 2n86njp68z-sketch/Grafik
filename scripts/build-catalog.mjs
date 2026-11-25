@@ -25,7 +25,7 @@ const GROUPS = [
   { id: 'sp500', name: 'S&P 500 Hisseleri', short: 'S&P 500' },
   { id: 'dow', name: 'Dow Jones 30 Hisseleri', short: 'Dow 30' },
   { id: 'us-pop', name: 'Diğer Popüler ABD Hisseleri', short: 'ABD Diğer' },
-  { id: 'etf', name: 'ABD ETF\'leri (en büyük 1500)', short: 'ETF' },
+  { id: 'etf', name: 'ETF\'ler (en büyük 1500 ABD ETF\'i + seçilenler)', short: 'ETF' },
 ];
 
 const COMMODITIES = [
@@ -144,6 +144,10 @@ BABA TSM NVO SONY TM SAP RBLX SNOW NET U SPOT SOFI RKLB IONQ NIO COIN HOOD PLTR 
 
 // Her zaman listede olsun istenen ETF'ler (Yahoo'nun fon büyüklüğü listesine ek olarak)
 const ETFS = 'SPY VOO IVV QQQ DIA IWM VTI VT VXUS SCHD VIG VYM XLK XLF XLE XLV SMH SOXX ARKK TLT IEF GLD IAU SLV GDX SIL TOPT'.split(' ');
+// ABD dışında işlem gören, istenen ETF'ler (Yahoo sembolü, görünen ad, not)
+const EXTRA_ETFS = [
+  { s: 'SXR8.DE', n: 'iShares Core S&P 500 UCITS ETF (Acc) · Xetra', note: 'Birikimli (Acc) fon: temettüler dağıtılmaz, fiyata dahildir (grafik zaten toplam getiridir). Xetra\'da euro ile işlem görür' },
+];
 // Fon büyüklüğüne (AUM) göre en büyük N ABD ETF'i
 const ETF_TOP = Number(process.env.ETF_TOP) || 1500;
 
@@ -252,6 +256,7 @@ async function refreshEtfsOnly() {
   const top = await topEtfsByAum(ETF_TOP);
   const wanted = new Map(top.map((x) => [x.s, x]));
   for (const s of ETFS) if (!wanted.has(s)) wanted.set(s, { s, n: null, aum: 0 });
+  for (const x of EXTRA_ETFS) wanted.set(x.s, { ...x, aum: -1 });
   console.log(`${wanted.size} ETF Yahoo Finance üzerinde doğrulanıyor…`);
   const valid = await validateAll([...wanted.keys()]);
   // Eski ETF kayıtlarını çıkar (başka grupta da olanlarda yalnız ETF grubunu sil), yenileri büyükten küçüğe ekle
@@ -268,7 +273,7 @@ async function refreshEtfsOnly() {
     if (!m) continue;
     const ex = bySym.get(x.s);
     if (ex) { ex.g.push('etf'); continue; }
-    const it = { s: x.s, n: x.n || m.longName || m.shortName || x.s, t: 'etf', cur: m.currency || 'USD', g: ['etf'] };
+    const it = { s: x.s, n: x.n || m.longName || m.shortName || x.s, t: 'etf', cur: m.currency || 'USD', g: ['etf'], ...(x.note ? { note: x.note } : {}) };
     items.push(it); bySym.set(it.s, it); added++;
   }
   catalog.items = items;
@@ -293,7 +298,7 @@ async function main() {
   ]);
   console.log(`Fon büyüklüğüne göre en büyük ${ETF_TOP} ETF Yahoo'dan alınıyor…`);
   const topEtfs = await topEtfsByAum(ETF_TOP);
-  for (const x of topEtfs) all.add(x.s);
+  for (const x of [...topEtfs, ...EXTRA_ETFS]) all.add(x.s);
   console.log(`${all.size} sembol Yahoo Finance üzerinde doğrulanıyor…`);
   const valid = await validateAll([...all]);
 
@@ -324,6 +329,7 @@ async function main() {
   for (const s of [...topEtfs.map((x) => x.s), ...ETFS]) {
     if (valid.has(s)) add({ s, n: etfNames.get(s) || valid.get(s).longName || s, t: 'etf', cur: valid.get(s).currency || 'USD' }, 'etf');
   }
+  for (const x of EXTRA_ETFS) if (valid.has(x.s)) add({ s: x.s, n: x.n, t: 'etf', cur: valid.get(x.s).currency || 'USD', note: x.note }, 'etf');
 
   const catalog = {
     generated: new Date().toISOString().slice(0, 10),
