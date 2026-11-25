@@ -84,11 +84,14 @@ const round7 = (v) => (v == null ? v : Number(v.toPrecision(7)));
 // Bir günde 20 kattan fazla değişim gerçek bir fiyat hareketi değil, veri hatasıdır
 // (ör. 2005 YTL geçişinde 6 sıfır atılmasının bazı hisselerde düzeltilmemiş olması).
 const GLITCH_RATIO = 20;
-// Borsa İstanbul'da günlük fiyat sınırı ±%10 (eskiden ±%20): tek günde %40'tan fazla düşüş ya da
-// %70'ten fazla yükseliş gerçek bir işlem olamaz; Yahoo'nun fiyata yansıtmadığı bedelsiz sermaye
-// artırımı / bölünme / birleştirme ya da veri hatasıdır.
-const BIST_DOWN = 0.6;
-const BIST_UP = 1.7;
+// Borsa İstanbul'da günlük fiyat sınırı 13 Mart 2020'den beri ±%10 (öncesinde ±%20). Sınırın
+// izin vermediği tek günlük hareket gerçek bir işlem olamaz; Yahoo'nun fiyata yansıtmadığı bedelsiz /
+// bedelli sermaye artırımı, bölünme, birleştirme ya da veri hatasıdır.
+// ±%10 döneminde eşik iki günlük sınır kadar (Yahoo bazen bir günü atlıyor: 0,9² ≈ 0,81, 1,1² = 1,21);
+// öncesinde ve uzun aralarda (tatil, deprem sonrası kapanış) daha geniş eşik.
+const BIST_LIMIT10_FROM = '2020-03-16';
+const BIST_TIGHT = [0.79, 1.23];
+const BIST_WIDE = [0.6, 1.7];
 // Her piyasada: %70+ sıçrayıp ertesi gün geri dönen tek günlük fiyat veri hatasıdır.
 const SPIKE_UP = 1.7;
 // Yahoo'nun bölünme kaydı fiyattaki sıçramayla eşleşirse (tarihi ±30 gün, oranı ±%40) kaydın tam
@@ -145,8 +148,8 @@ export function processDaily(res) {
       fixes.push({ type: 'rescale', k: K[j], factor: round7(f) });
       continue;
     }
-    if (r > 0.75 && r < 1.33) continue;
-    const ev = splitEvents.find((e) => !e.used && daysApart(e.k, K[j]) <= SPLIT_MATCH_DAYS &&
+    // Bölünme kaydıyla eşleştirme yalnızca büyük sıçramalarda (normal bir gün yanlışlıkla eşleşmesin)
+    const ev = outside(r, 1.33) && splitEvents.find((e) => !e.used && daysApart(e.k, K[j]) <= SPLIT_MATCH_DAYS &&
       outside(e.R, 1.33) && r * e.R > 0.7 && r * e.R < 1.4);
     if (ev) {
       ev.used = true;
@@ -155,7 +158,8 @@ export function processDaily(res) {
       fixes.push({ type: 'split', k: K[j], ratio: round7(ev.R) });
       continue;
     }
-    if (bist && (r < BIST_DOWN || r > BIST_UP)) {
+    const [lo, hi] = K[j] >= BIST_LIMIT10_FROM && daysApart(K[j], K[j - 1]) <= 5 ? BIST_TIGHT : BIST_WIDE;
+    if (bist && (r < lo || r > hi)) {
       jumpAt.set(j, r);
       fixes.push({ type: 'corp', k: K[j], factor: round7(r) });
       continue;

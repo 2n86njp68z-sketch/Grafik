@@ -84,9 +84,11 @@ daha eski fiyatlar çevrilmiş para biriminde gösterilemez (uygulama bunu not o
 - Bir günde 20 kattan fazla sıçrama (ör. bazı BIST hisselerinde 2005'teki 6 sıfır atılmasının
   düzeltilmemiş olması) önceki fiyatlar ölçeklenerek giderilir.
 - Yahoo'nun fiyata yansıtmadığı bölünme / bedelsiz sermaye artırımları: Yahoo'da bölünme kaydı varsa
-  (tarihi kaymış olsa bile) kaydın tam oranı kullanılır. Kayıt yoksa, Borsa İstanbul'da günlük fiyat
-  sınırı %10 olduğundan bir günde %40'tan fazla düşüş ya da %70'ten fazla yükseliş bedelsiz / bölünme /
-  birleştirme kabul edilir ve önceki fiyatlar o güne göre ölçeklenir (ör. CCOLA 01.08.2024, 1'e 11).
+  (tarihi kaymış olsa bile) kaydın tam oranı kullanılır. Kayıt yoksa, Borsa İstanbul'un günlük fiyat
+  sınırının izin vermediği hareket bedelsiz / bedelli / bölünme / birleştirme kabul edilir ve önceki
+  fiyatlar o güne göre ölçeklenir (ör. CCOLA 01.08.2024, 1'e 11). Sınır 13 Mart 2020'den beri %10:
+  bu dönemde tek günde %21'den fazla düşüş ya da %23'ten fazla yükseliş (Yahoo'nun bir günü atlamasına
+  karşı iki günlük sınır payıyla); öncesinde (%20 sınır) ve uzun aralarda %40 düşüş / %70 yükseliş.
 - Herhangi bir piyasada ertesi gün geri dönen %70+ tek günlük sıçrama hatalı fiyat sayılır.
 - Kapanış fiyatının yarısından büyük, bozuk görünen temettü kayıtları hesaba katılmaz.
 
