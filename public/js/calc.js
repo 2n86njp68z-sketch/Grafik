@@ -110,6 +110,9 @@ const CA_TOL = Math.log(1.25);
 // Bu kadar küçük oranlı olaylar (ör. %10 bedelsiz) normal bir günden ayırt edilemez; doğrudan olay
 // tarihinde uygulanır.
 const CA_SMALL = Math.log(1.2);
+// Yahoo bazı az işlem gören BIST hisselerinde fiyatı aylarca güncellemiyor (aynı kapanış tekrar
+// ediyor). Bu kadar gün aynı kalan dönem, İş Yatırım ham fiyatı varsa onunla doldurulur.
+const FROZEN_MIN = 10;
 
 /**
  * Yahoo /v8/finance/chart günlük yanıtını işler.
@@ -122,8 +125,9 @@ const CA_SMALL = Math.log(1.2);
  * düzeltmeleri tahmin yerine resmi oranla yapılır.
  * `dayRet` (isteğe bağlı): { 'YYYY-MM-DD': o günün gerçek fiyat değişimi (oran) }. Tahminle
  * düzeltilen günlerde o günün değişimi 0 sayılmak yerine bununla korunur (İş Yatırım ham fiyatından).
+ * `px` (isteğe bağlı): { 'YYYY-MM-DD': ham kapanış } — Yahoo'nun donuk fiyat dönemlerini doldurur.
  */
-export function processDaily(res, ca = null, dayRet = null) {
+export function processDaily(res, ca = null, dayRet = null, px = null) {
   const meta = res?.meta || {};
   const tz = meta.exchangeTimezoneName || 'UTC';
   const ts = res?.timestamp || [];
@@ -141,6 +145,32 @@ export function processDaily(res, ca = null, dayRet = null) {
   }
   const n = K.length;
   const fixes = [];
+  const bistSym = isBist(meta.symbol);
+
+  // --- Yahoo'nun donuk fiyat dönemleri (BIST): İş Yatırım ham kapanışlarıyla doldur ---
+  // Dönemden sonraki ilk gerçek gün çapa: ham fiyat, Yahoo'nun o günkü ölçeğine getirilir.
+  const needPx = [];
+  if (bistSym) {
+    let s0 = 0;
+    for (let i = 1; i < n; i++) {
+      if (C[i] === C[i - 1]) continue;
+      if (i - s0 >= FROZEN_MIN) {
+        const a = i;
+        if (px && px[K[a]] > 0) {
+          const scale = C[a] / px[K[a]];
+          let last = null, changed = false;
+          for (let j = s0; j < a; j++) {
+            if (px[K[j]] > 0) last = px[K[j]];
+            if (last != null) { const v = last * scale; if (Math.abs(v / C[j] - 1) > 1e-6) changed = true; C[j] = v; }
+          }
+          if (changed) fixes.push({ type: 'frozen', k: K[s0], to: K[a - 1] });
+        } else if (!px || !(K[a] in px)) {
+          needPx.push([K[s0], K[a]]);
+        }
+      }
+      s0 = i;
+    }
+  }
 
   // --- Fiyat düzeltmeleri: düzeltilmemiş bölünme/bedelsiz ve veri hataları ---
   // jumpAt: j → f; j'den önceki kapanışlar f ile çarpılır (j günündeki sıçrama giderilir).
@@ -222,6 +252,20 @@ export function processDaily(res, ca = null, dayRet = null) {
           }
         } else if (!(K[iE] in (dayRet || {}))) need.add(K[iE]);
       }
+    }
+    // Resmi kayıtlarda karşılığı olmayan Yahoo bölünmesi (ör. HLGYO 2025-06-18: o gün yalnızca temettü
+    // var, Yahoo ayrıca %4,35 bedelsiz uygulamış) gerçek değildir; Yahoo'nun uyguladığı oranı geri al.
+    // Geri almak sınırın izin vermediği bir sıçrama yaratacaksa gerçek bir olaydır, dokunma.
+    const capDays = [...byDay.values()].filter((e) => Math.abs(Math.log(e.f)) >= 0.005).map((e) => e.k);
+    const covered = official.length ? official.reduce((m, e) => (e.k < m ? e.k : m), official[0].k) : null;
+    for (const y of splitEvents) {
+      if (y.used || !(y.R > 0) || Math.abs(Math.log(y.R)) < 0.005 || !covered || y.k < covered) continue;
+      if (capDays.some((k) => daysApart(k, y.k) <= SPLIT_MATCH_DAYS)) continue;
+      const iy = firstIndexAtOrAfter(K, y.k);
+      if (iy <= 0 || iy >= n || impossible(iy, residual(iy) / y.R)) continue;
+      y.used = true;
+      addJump(iy, y.R);
+      fixes.push({ type: 'phantom', k: y.k, ratio: round7(y.R) });
     }
   }
 
@@ -328,6 +372,7 @@ export function processDaily(res, ca = null, dayRet = null) {
     fixes,
     src: official ? 'isyatirim' : null, // temettü / sermaye olaylarının kaynağı
     need: [...need].sort(), // gerçek günlük değişimi bilinirse daha doğru düzeltilecek günler
+    needPx, // İş Yatırım ham fiyatıyla doldurulacak donuk dönemler [başlangıç, çapa günü]
     price: meta.regularMarketPrice,
     priceTime: meta.regularMarketTime,
   };

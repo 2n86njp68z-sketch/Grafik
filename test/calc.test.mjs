@@ -174,6 +174,35 @@ test('İş Yatırım: Yahoo olayı kendi yanlış oranıyla kısmen uygulamışs
   assert.equal(d.fixes[0].type, 'ca');
 });
 
+test('İş Yatırım: resmi karşılığı olmayan Yahoo bölünmesi geri alınır', () => {
+  // HLGYO: Yahoo 2025-06-18'de %4,35 bedelsiz uygulamış (önceki fiyatlar /1,0435), resmi kayıtta yalnız temettü var
+  const ca = [{ k: '2025-06-18', t: '04', f: 0.9984 }, { k: '2025-09-18', t: '09', f: 1 / 1.0435 }];
+  const d = processDaily(yahoo({
+    symbol: 'HLGYO.IS', keys: ['2025-06-16', '2025-06-17', '2025-06-18', '2025-06-19'],
+    closes: [2.3 / 1.0434782, 2.31 / 1.0434782, 2.32, 2.33],
+    splits: [['2025-06-18', 104.34782, 100], ['2025-09-18', 104.34782, 100]],
+  }), ca);
+  close(d.c[1], 2.31);
+  assert.deepEqual(d.fixes.map((f) => f.type), ['phantom']);
+});
+
+test('Yahoo donuk fiyat dönemi (BIST) İş Yatırım ham kapanışlarıyla doldurulur', () => {
+  // KSTUR: Yahoo fiyatı aylarca 11,81'de takılı, sonra gerçek fiyat (310) geliyor
+  const keys = [], closes = [], px = {};
+  for (let i = 0; i < 12; i++) {
+    const k = `2023-03-${String(6 + i).padStart(2, '0')}`;
+    keys.push(k); closes.push(11.81); px[k] = 250 + i * 3;
+  }
+  keys.push('2023-03-24'); closes.push(310); px['2023-03-24'] = 310;
+  const unknown = processDaily(yahoo({ symbol: 'KSTUR.IS', keys, closes }));
+  assert.deepEqual(unknown.needPx, [['2023-03-06', '2023-03-24']]);
+  const d = processDaily(yahoo({ symbol: 'KSTUR.IS', keys, closes }), null, null, px);
+  close(d.c[0], 250);
+  close(d.c[11], 283);
+  assert.equal(d.fixes[0].type, 'frozen');
+  assert.ok(!d.fixes.some((f) => f.type === 'rescale')); // sahte 26 kat sıçrama kalmadı
+});
+
 test('BIST dışı: gerçek sert düşüş (ör. bilanço sonrası %52) düzeltilmez', () => {
   const d = processDaily(yahoo({
     symbol: 'AAPL', tz: 'America/New_York', currency: 'USD',
