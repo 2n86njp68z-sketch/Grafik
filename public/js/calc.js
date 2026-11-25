@@ -120,8 +120,10 @@ const CA_SMALL = Math.log(1.2);
  * [{ k: 'YYYY-MM-DD', t: SHT_KODU ('04' = nakit temettü), f: resmi fiyat ayar oranı }].
  * Verilirse temettüler Yahoo yerine bundan alınır ve bedelsiz/bedelli/birleştirme
  * düzeltmeleri tahmin yerine resmi oranla yapılır.
+ * `dayRet` (isteğe bağlı): { 'YYYY-MM-DD': o günün gerçek fiyat değişimi (oran) }. Tahminle
+ * düzeltilen günlerde o günün değişimi 0 sayılmak yerine bununla korunur (İş Yatırım ham fiyatından).
  */
-export function processDaily(res, ca = null) {
+export function processDaily(res, ca = null, dayRet = null) {
   const meta = res?.meta || {};
   const tz = meta.exchangeTimezoneName || 'UTC';
   const ts = res?.timestamp || [];
@@ -219,8 +221,10 @@ export function processDaily(res, ca = null) {
     }
     const [lo, hi] = K[j] >= BIST_LIMIT10_FROM && daysApart(K[j], K[j - 1]) <= 5 ? BIST_TIGHT : BIST_WIDE;
     if (bist && (r < lo || r > hi)) {
-      addJump(j, r);
-      fixes.push({ type: 'corp', k: K[j], factor: round7(r) });
+      const m = dayRet?.[K[j]];
+      const exact = m > 0.7 && m < 1.4; // o günün gerçek değişimi biliniyorsa korunur
+      addJump(j, exact ? r / m : r);
+      fixes.push({ type: 'corp', k: K[j], factor: round7(exact ? r / m : r), ...(exact ? { exact: true } : {}) });
       continue;
     }
     const r2 = j + 1 < n ? residual(j + 1) : 1;
