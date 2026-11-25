@@ -25,7 +25,7 @@ const GROUPS = [
   { id: 'sp500', name: 'S&P 500 Hisseleri', short: 'S&P 500' },
   { id: 'dow', name: 'Dow Jones 30 Hisseleri', short: 'Dow 30' },
   { id: 'us-pop', name: 'Diğer Popüler ABD Hisseleri', short: 'ABD Diğer' },
-  { id: 'etf', name: 'ABD ETF\'leri (en büyük 1000)', short: 'ETF' },
+  { id: 'etf', name: 'ABD ETF\'leri (en büyük 1500)', short: 'ETF' },
 ];
 
 const COMMODITIES = [
@@ -143,9 +143,9 @@ const US_POPULAR = `ASML AZN PDD MELI ARM TEAM MDB GFS CCEP SHOP MSTR ZS JD BIDU
 BABA TSM NVO SONY TM SAP RBLX SNOW NET U SPOT SOFI RKLB IONQ NIO COIN HOOD PLTR APP DDOG TTD`.split(/\s+/).filter(Boolean);
 
 // Her zaman listede olsun istenen ETF'ler (Yahoo'nun fon büyüklüğü listesine ek olarak)
-const ETFS = 'SPY VOO IVV QQQ DIA IWM VTI VT VXUS SCHD VIG VYM XLK XLF XLE XLV SMH SOXX ARKK TLT IEF GLD IAU SLV GDX SIL'.split(' ');
+const ETFS = 'SPY VOO IVV QQQ DIA IWM VTI VT VXUS SCHD VIG VYM XLK XLF XLE XLV SMH SOXX ARKK TLT IEF GLD IAU SLV GDX SIL TOPT'.split(' ');
 // Fon büyüklüğüne (AUM) göre en büyük N ABD ETF'i
-const ETF_TOP = Number(process.env.ETF_TOP) || 1000;
+const ETF_TOP = Number(process.env.ETF_TOP) || 1500;
 
 /**
  * Yahoo'nun ETF tarayıcısından ABD'de işlem gören ETF'leri fon büyüklüğüne (net varlık) göre

@@ -881,7 +881,7 @@ function renderList() {
       const d = document.createElement('div');
       d.className = 'list-empty';
       d.textContent = api.isStatic
-        ? 'Sonuç yok. Web sürümünde yalnızca listedeki ~2.200 sembol var.'
+        ? 'Sonuç yok. Web sürümünde yalnızca listedeki ~2.700 sembol var.'
         : state.query.trim().length >= 2 ? 'Aranıyor…' : 'Sonuç yok';
       frag.append(d);
     }
