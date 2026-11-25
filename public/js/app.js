@@ -502,10 +502,34 @@ function renderNotes(view, cur, truncated, earliest) {
     }
   }
   if (!convAvailable(state.cur) && !it.lockCur) add(`⚠️ Kur verisi alınamadığı için ${D.native} cinsinden gösteriliyor.`);
-  for (const f of D.daily.fixes || []) {
-    if (!earliest || f.k < earliest) continue; // düzeltme görüntülenen dönemi etkilemiyor
-    if (f.type === 'rescale') add(`🔧 Veri düzeltmesi: ${F.fmtDateKeyNumeric(f.k)} tarihindeki hatalı fiyat sıçraması (×${F.fmtNumber(f.factor, f.factor >= 10 ? 0 : 2)}) düzeltildi.`);
-    if (f.type === 'div-skip') add(`🔧 ${F.fmtDateKeyNumeric(f.k)} tarihli hatalı görünen temettü kaydı hesaba katılmadı.`);
+  // Düzeltme görüntülenen dönemi etkiliyorsa not düş; çoksa (eski BIST verisi) tek satırda özetle
+  const fixes = (D.daily.fixes || []).filter((f) => earliest && f.k >= earliest);
+  if (fixes.length > 3) {
+    const last = fixes[fixes.length - 1];
+    add(`🔧 Bu dönemde Yahoo verisindeki ${fixes.length} hata düzeltildi (fiyata yansıtılmamış bedelsiz/bölünmeler, hatalı fiyatlar). En sonuncusu: ${F.fmtDateKeyNumeric(last.k)}.`);
+  } else {
+    for (const f of fixes) add(fixNote(f));
+  }
+}
+
+function fixNote(f) {
+  const day = F.fmtDateKeyNumeric(f.k);
+  const shares = (r) => F.fmtNumber(r, Number.isInteger(r) ? 0 : 2);
+  switch (f.type) {
+    case 'split':
+      return `🔧 ${day}: Bölünme / bedelsiz (1 pay → ${shares(f.ratio)} pay) Yahoo verisinde fiyata yansıtılmamıştı; önceki fiyatlar buna göre düzeltildi.`;
+    case 'corp':
+      return f.factor < 1
+        ? `🔧 ${day}: Fiyattaki ani ${F.fmtPct(f.factor - 1)} değişim bedelsiz / bölünme kaynaklı (Borsa İstanbul'da günlük sınır %10); önceki fiyatlar buna göre düzeltildi.`
+        : `🔧 ${day}: Fiyattaki ani ${F.fmtPct(f.factor - 1)} değişim sermaye azaltımı / pay birleştirme ya da veri hatası (Borsa İstanbul'da günlük sınır %10); önceki fiyatlar buna göre düzeltildi.`;
+    case 'spike':
+      return `🔧 ${day}: Ertesi gün geri dönen hatalı fiyat düzeltildi.`;
+    case 'rescale':
+      return `🔧 Veri düzeltmesi: ${day} tarihindeki hatalı fiyat sıçraması (×${F.fmtNumber(f.factor, f.factor >= 10 ? 0 : 2)}) düzeltildi.`;
+    case 'div-skip':
+      return `🔧 ${day} tarihli hatalı görünen temettü kaydı hesaba katılmadı.`;
+    default:
+      return `🔧 ${day}: Veri düzeltmesi yapıldı.`;
   }
 }
 
