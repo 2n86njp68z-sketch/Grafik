@@ -273,7 +273,7 @@ async function refreshEtfsOnly() {
   }
   catalog.items = items;
   catalog.generated = new Date().toISOString().slice(0, 10);
-  if (!/ETF/.test(catalog.source)) catalog.source += `; ETF'ler: Yahoo Finance ETF tarayıcısı, fon büyüklüğüne göre ilk ${ETF_TOP}`;
+  catalog.source = catalog.source.replace(/; ETF'ler:.*$/, '') + `; ETF'ler: Yahoo Finance ETF tarayıcısı, fon büyüklüğüne göre ilk ${ETF_TOP}`;
   catalog.groups = catalog.groups.map((g) => (g.id === 'etf' ? GROUPS.find((x) => x.id === 'etf') : g));
   fs.writeFileSync(OUT, JSON.stringify(catalog));
   console.log(`Yazıldı: ${added} ETF; katalogda toplam ${catalog.items.length} enstrüman`);

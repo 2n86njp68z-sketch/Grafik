@@ -41,6 +41,13 @@ export function fmtPct(p, opts = {}) {
   }).format(p);
 }
 
+/** Değişimi kat olarak yazar: +%878 → "9,78 kat", -%40 → "0,60 kat". */
+export function fmtMult(p) {
+  const m = 1 + p;
+  if (p == null || !Number.isFinite(m) || m <= 0) return '';
+  return `${fmtNumber(m, m >= 100 ? 0 : m >= 10 ? 1 : 2)} kat`;
+}
+
 /** Grafik ekseni için kısa yüzde ("+%5", "-%2,5"). */
 export function fmtPctAxis(p) {
   if (!Number.isFinite(p)) return '';

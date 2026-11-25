@@ -24,6 +24,11 @@ saatte bir, hafta sonu günde bir otomatik güncellenir (sayfanın altında son 
   - **Emtia**: Altın, **Gram Altın**, Gümüş, Gram Gümüş, Platin, Paladyum, Bakır, Petrol (WTI/Brent), Doğal Gaz
   - **Döviz & Kripto**: USD/TRY, EUR/TRY, GBP/TRY, EUR/USD, Dolar Endeksi, Bitcoin, Ethereum
   - Bilgisayarda çalışan sürümde listede olmayan her şey arama kutusundan bulunur (Yahoo Finance'teki tüm semboller)
+- **Karşılaştırma**: **＋ Karşılaştır** ile açık grafiğe 3 enstrümana kadar ekleyin (ör. THYAO + ASELS + VOO).
+  Hepsi aynı başlangıç gününden, aynı para biriminde (TL/USD) ve temettü dahil yüzde değişim olarak
+  aynı grafikte çizilir; tarih aralığı kutusunda getiriler büyükten küçüğe sıralanır. Karşılaştırma
+  linke de yazılır, paylaşılabilir.
+- Her getiri **kat** olarak da yazılır: +%878 → (9,78 kat)
 - **Dönemler**: 1G · 1H · 1A · 3A · 6A · 1Y · 5Y · 10Y · Tümü
 - **Fiyat** veya **yüzde %** gösterimi; uzun dönemler için **logaritmik** ölçek
 - **TL / USD** dönüşümü: her gün, o günün USD/TRY kuruyla çevrilir

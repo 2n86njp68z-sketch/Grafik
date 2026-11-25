@@ -72,8 +72,13 @@
         <label class="switch" title="Logaritmik ölçek (uzun dönemlerde faydalı)">
           <input type="checkbox" id="logChk"><span class="track"></span><span>Log</span>
         </label>
+        <button class="btn cmp-btn" id="cmpBtn" title="Başka bir hisse, endeks, ETF ya da emtia ile aynı grafikte karşılaştır">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 17l5-6 4 3 6-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 20l6-4 4 2 8-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg>
+          Karşılaştır
+        </button>
       </div>
     </div>
+    <div class="cmp-bar" id="cmpBar" hidden></div>
 
     <section class="card chart-card" id="chartCard">
       <div class="legend" id="legend" aria-live="polite"></div>
@@ -103,6 +108,7 @@
           <div class="res-extra" id="resExtra"></div>
         </div>
       </div>
+      <div class="res-cmp" id="resCmp" hidden></div>
     </section>
 
     <footer class="notes" id="notes"></footer>
@@ -111,6 +117,14 @@
     </footer>
   </main>
 </div>
+
+<dialog class="dlg cmp-dlg" id="cmpDlg" aria-labelledby="cmpTitle">
+  <form method="dialog" class="dlg-close"><button class="icon-btn" aria-label="Kapat">✕</button></form>
+  <h2 id="cmpTitle">Karşılaştır</h2>
+  <p class="dlg-note cmp-note">Aynı grafikte, aynı başlangıç gününden itibaren yüzde değişim olarak gösterilir (en fazla 3 tane).</p>
+  <input id="cmpSearch" class="cmp-search" type="search" placeholder="Ara: ASELS, S&amp;P 500, altın, QQQ…" autocomplete="off" spellcheck="false" aria-label="Karşılaştırılacak enstrümanı ara">
+  <div class="list cmp-list" id="cmpList" role="listbox" aria-label="Sonuçlar"></div>
+</dialog>
 
 <dialog class="dlg" id="phoneDlg" aria-labelledby="phoneTitle">
   <form method="dialog" class="dlg-close"><button class="icon-btn" aria-label="Kapat">✕</button></form>

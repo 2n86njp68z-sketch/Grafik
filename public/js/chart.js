@@ -50,6 +50,7 @@ export class PriceChart {
       crosshairMarkerVisible: false,
       priceFormat: { type: 'custom', minMove: 0.000001, formatter: (v) => this.formatter(v) },
     });
+    this.cmpSeries = []; // karşılaştırma çizgileri
     this.baseLine = null;
     this.data = [];
     this.applyTheme();
@@ -100,7 +101,8 @@ export class PriceChart {
    * view: {
    *   points: [{time, value}], intraday, up, log, formatter,
    *   baseValue (kesikli çizgi; null = yok), selection: [{time, value}] | null,
-   *   markers: [{time, text}]
+   *   markers: [{time, text}], color (isteğe bağlı sabit renk), title,
+   *   compare: [{ points: [{time, value}], color, title }]  (karşılaştırma çizgileri)
    * }
    */
   setView(view, keepRange = false) {
@@ -108,8 +110,24 @@ export class PriceChart {
     this.intraday = !!view.intraday;
     this.formatter = view.formatter;
     const c = this.colors;
-    const color = view.up ? c.up : c.down;
-    this.area.applyOptions({ lineColor: color, topColor: withAlpha(color, 0.22), bottomColor: withAlpha(color, 0.0) });
+    const cmp = view.compare || [];
+    // Karşılaştırmada ana enstrüman sabit renkte (yükseliş/düşüş rengi yerine)
+    const color = view.color || (view.up ? c.up : c.down);
+    this.area.applyOptions({
+      lineColor: color, topColor: withAlpha(color, cmp.length ? 0.10 : 0.22), bottomColor: withAlpha(color, 0.0),
+      title: view.title || '',
+    });
+    while (this.cmpSeries.length < cmp.length) {
+      this.cmpSeries.push(this.chart.addLineSeries({
+        lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3,
+        priceFormat: { type: 'custom', minMove: 0.000001, formatter: (v) => this.formatter(v) },
+      }));
+    }
+    while (this.cmpSeries.length > cmp.length) this.chart.removeSeries(this.cmpSeries.pop());
+    cmp.forEach((cs, i) => {
+      this.cmpSeries[i].applyOptions({ color: cs.color, title: cs.title || '', crosshairMarkerBorderColor: c.surface });
+      this.cmpSeries[i].setData(cs.points);
+    });
     this.chart.applyOptions({ timeScale: { timeVisible: this.intraday, secondsVisible: false } });
     this.chart.priceScale('right').applyOptions({ mode: view.log ? LWC.PriceScaleMode.Logarithmic : LWC.PriceScaleMode.Normal });
 
@@ -139,6 +157,11 @@ export class PriceChart {
     }
     if (range && keepRange) this.chart.timeScale().setVisibleLogicalRange(range);
     else this.chart.timeScale().fitContent();
+  }
+
+  /** Fiyat ekseninin üst boşluğu (grafik yüksekliğine oranla). */
+  setTopMargin(top) {
+    this.chart.priceScale('right').applyOptions({ scaleMargins: { top, bottom: 0.08 } });
   }
 
   /** Grafik zamanına en yakın (öncesindeki) noktanın indeksi. */
