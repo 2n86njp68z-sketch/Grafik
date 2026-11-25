@@ -537,6 +537,10 @@ function fixNote(f) {
         : `🔧 ${day}: Fiyattaki ani ${F.fmtPct(f.factor - 1)} değişim sermaye azaltımı / pay birleştirme ya da veri hatası (Borsa İstanbul'da günlük sınır %10); önceki fiyatlar buna göre düzeltildi.`;
     case 'spike':
       return `🔧 ${day}: Ertesi gün geri dönen hatalı fiyat düzeltildi.`;
+    case 'phantom':
+      return `🔧 ${day}: Yahoo'nun uyguladığı bölünme / bedelsiz (1 pay → ${shares(f.ratio)} pay) resmi kayıtlarda yok; geri alındı.`;
+    case 'frozen':
+      return `🔧 ${day} – ${F.fmtDateKeyNumeric(f.to)}: Yahoo bu dönemde fiyatı güncellememişti; gerçek işlem fiyatları İş Yatırım'dan alındı.`;
     case 'rescale':
       return `🔧 Veri düzeltmesi: ${day} tarihindeki hatalı fiyat sıçraması (×${F.fmtNumber(f.factor, f.factor >= 10 ? 0 : 2)}) düzeltildi.`;
     case 'div-skip':

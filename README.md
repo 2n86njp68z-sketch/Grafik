@@ -81,6 +81,14 @@ sıçramaya denk geliyorsa (Yahoo bazı bölünmeleri birkaç gün kaydırıyor)
 düzeltilir, Yahoo zaten düzeltmişse dokunulmaz. Kayıtlar sitede her hisse için günde birkaç kez
 yenilenir (`data/isy.json`); İş Yatırım'a erişilemezse aşağıdaki tahmin yöntemine geri dönülür.
 Bu resmi bir API değildir; yalnızca kişisel kullanım içindir.
+Ayrıca İş Yatırım'ın ham (işlem gören) fiyatıyla:
+- Yahoo'nun az işlem gören bazı hisselerde aylarca güncellemediği (donuk) fiyat dönemleri doldurulur
+  (ör. KSTUR 2018–2023);
+- Resmi kayıtlarda karşılığı olmayan Yahoo bölünmeleri geri alınır;
+- Yahoo'nun tutarsız düzelttiği günlerde o günün gerçek değişimi korunur.
+Bu ham fiyatlar yavaş bir uç noktadan bir kez çekilip saklanır; site ilk günlerde bunları
+birkaç turda tamamlar. Doğrulama: 24 BIST hissesinin 5 yıllık toplam getirisi, İş Yatırım'ın kendi
+düzeltilmiş kapanışıyla 23'ünde birebir (en büyük fark 0,7 puan).
 
 **TL ↔ USD.** Her günün fiyatı, aynı günün (yoksa önceki son günün) USD/TRY kapanış kuruyla
 çevrilir. Gün içi grafiklerde gün içi kur kullanılır. USD/TRY verisi 3 Ocak 2005'ten başladığı için

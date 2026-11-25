@@ -10,9 +10,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getDaily, getIntraday } from '../lib/yahoo.js';
-import { fetchCorporateActions, isyCode, packCA, unpackCA } from '../lib/isyatirim.js';
-import { dateKey, lastIndexAtOrBefore, staticFileName } from '../public/js/calc.js';
+import { getDailyRaw, getIntraday } from '../lib/yahoo.js';
+import { fetchCorporateActions, fetchDayReturns, fetchRawCloses, isyCode, packCA, unpackCA } from '../lib/isyatirim.js';
+import { dateKey, lastIndexAtOrBefore, processDaily, staticFileName } from '../public/js/calc.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || path.join(ROOT, 'site'));
@@ -158,12 +158,41 @@ async function main() {
   const isy = await loadIsyCache();
   isy.s = isy.s || {};
   await refreshIsy(isy, symbols.filter((s) => isyCode(s)));
+  // Tahminle düzeltilen günlerin gerçek değişimi için ayrı süre (uç nokta yavaş; sonuçlar kalıcı)
+  const hintDeadline = Date.now() + (Number(process.env.ISY_HINT_SEC) || 300) * 1000;
+  let hintsFetched = 0;
 
   const extraFx = new Set();
   const doSymbol = async (sym) => {
     try {
       const isyRec = isy.s[sym];
-      const daily = await getDaily(sym, { ca: isyRec?.e?.length ? unpackCA(isyRec.e) : null });
+      const ca = isyRec?.e?.length ? unpackCA(isyRec.e) : null;
+      const raw = await getDailyRaw(sym);
+      let daily = processDaily(raw, ca, isyRec?.dr || null, isyRec?.px || null);
+      if (ca && Date.now() < hintDeadline) {
+        let again = false;
+        // Yahoo'nun donuk fiyat dönemleri: İş Yatırım ham kapanışlarını bir kez çekip sakla
+        for (const [from, anchor] of (daily.needPx || []).slice(-2)) {
+          try {
+            const got = await fetchRawCloses(sym, from, anchor);
+            isyRec.px = { ...(isyRec.px || {}), ...got, [anchor]: got[anchor] || 0 };
+            hintsFetched++;
+            again = true;
+          } catch { break; }
+        }
+        if (again) daily = processDaily(raw, ca, isyRec.dr || null, isyRec.px);
+        // Resmi kayıtla açıklanamayan sıçramalar tahminle düzeltilir; o günün gerçek değişimini
+        // İş Yatırım ham fiyatından bir kez alıp sakla (yoksa o gün değişim 0 sayılır)
+        const need = (daily.need || []).filter((k) => !(isyRec.dr && k in isyRec.dr)).slice(-6); // en yeniler önce
+        if (need.length) {
+          try {
+            isyRec.dr = { ...(isyRec.dr || {}), ...(await fetchDayReturns(sym, need, ca)) };
+            hintsFetched += need.length;
+            daily = processDaily(raw, ca, isyRec.dr, isyRec.px || null);
+          } catch { /* sonraki tura */ }
+        }
+      }
+      if (!daily.k.length) throw new Error('Bu sembol için fiyat geçmişi yok');
       const { hist, rec } = packDaily(daily);
       write(`d/${staticFileName(sym)}.json`, hist);
       write(`r/${staticFileName(sym)}.json`, rec);
@@ -203,6 +232,7 @@ async function main() {
     ...failed.flatMap((s) => ['d', 'r', 'i'].map((dir) => `data/${dir}/${staticFileName(s)}.json`)),
     ...failedIntra.map((s) => `data/i/${staticFileName(s)}.json`),
   ];
+  if (hintsFetched) console.log(`İş Yatırım: ${hintsFetched} gün / dönem için ham fiyat alındı`);
   write('isy.json', isy);
   write('meta.json', { builtAt, symbols: symbols.length - failed.length, failed, failedFiles });
 
