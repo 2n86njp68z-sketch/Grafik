@@ -102,13 +102,26 @@ const outside = (r, up) => r > up || r < 1 / up;
 const daysApart = (a, b) => Math.abs(keyToSec(a) - keyToSec(b)) / 86400;
 // Kapanışın %50'sinden büyük tek seferlik temettü kaydı bozuk kabul edilir.
 const MAX_DIV_YIELD = 0.5;
+// Resmi olay (İş Yatırım) Yahoo'daki sıçramayla eşleşirken: olay tarihinden 15 işlem günü önce ile
+// 5 gün sonrası arasında (Yahoo bazı bölünmeleri birkaç gün kaydırıyor), oran ±%25 toleransla.
+const CA_BEFORE = 15;
+const CA_AFTER = 5;
+const CA_TOL = Math.log(1.25);
+// Bu kadar küçük oranlı olaylar (ör. %10 bedelsiz) normal bir günden ayırt edilemez; doğrudan olay
+// tarihinde uygulanır.
+const CA_SMALL = Math.log(1.2);
 
 /**
  * Yahoo /v8/finance/chart günlük yanıtını işler.
  * Dönen `c` bölünmelere göre düzeltilmiş kapanış, `a` ise temettüler yeniden
  * yatırılmış kabul edilerek geriye doğru düzeltilmiş kapanıştır (toplam getiri).
+ *
+ * `ca` (isteğe bağlı, BIST): İş Yatırım'dan resmi sermaye olayları ve nakit temettüler,
+ * [{ k: 'YYYY-MM-DD', t: SHT_KODU ('04' = nakit temettü), f: resmi fiyat ayar oranı }].
+ * Verilirse temettüler Yahoo yerine bundan alınır ve bedelsiz/bedelli/birleştirme
+ * düzeltmeleri tahmin yerine resmi oranla yapılır.
  */
-export function processDaily(res) {
+export function processDaily(res, ca = null) {
   const meta = res?.meta || {};
   const tz = meta.exchangeTimezoneName || 'UTC';
   const ts = res?.timestamp || [];
@@ -137,14 +150,60 @@ export function processDaily(res) {
   const bist = isBist(meta.symbol);
   const jumpAt = new Map();
   const divBasis = new Map();
+  // j günündeki, o ana kadar atanmış düzeltmeler uygulandıktan sonra kalan hareket
+  const residual = (j) => C[j] / C[j - 1] / (jumpAt.get(j) || 1);
+
+  // --- Resmi sermaye olayları (İş Yatırım): aynı güne düşenler birleştirilir ---
+  const official = Array.isArray(ca) && ca.length
+    ? ca.filter((e) => e && typeof e.k === 'string' && Number.isFinite(e.f) && e.f > 0)
+    : null;
+  if (official) {
+    const byDay = new Map();
+    for (const e of official) if (e.t !== '04') byDay.set(e.k, { k: e.k, t: e.t, f: (byDay.get(e.k)?.f || 1) * e.f });
+    for (const e of [...byDay.values()].sort((a, b) => a.k.localeCompare(b.k))) {
+      const lf = Math.log(e.f);
+      if (Math.abs(lf) < 0.005) continue; // fiyatı etkilemeyen olay (ör. rüçhan hakkı kısıtlanarak)
+      const iE = firstIndexAtOrAfter(K, e.k);
+      if (iE <= 0 || iE >= n) continue; // veri başlamadan önce ya da henüz gerçekleşmemiş
+      // 1) Yahoo fiyatında bu olaya uyan, düzeltilmemiş bir düşüş/sıçrama var mı? Uygulandığında kalan
+      // hareket hem olayın yarısından küçük hem de bir günlük olağan hareket kadar olmalı. Küçük
+      // olaylar normal günlerle karışmasın diye yalnızca olay günü ±1 gün aranır.
+      const small = Math.abs(lf) < CA_SMALL;
+      let best = -1, bestErr = Math.min(CA_TOL, Math.abs(lf) / 2);
+      for (let j = Math.max(1, iE - (small ? 1 : CA_BEFORE)); j <= Math.min(n - 1, iE + (small ? 1 : CA_AFTER)); j++) {
+        const err = Math.abs(Math.log(residual(j)) - lf);
+        if (err < bestErr) { best = j; bestErr = err; }
+      }
+      if (best >= 0) {
+        jumpAt.set(best, (jumpAt.get(best) || 1) * e.f);
+        const ysj = splitEvents.find((y) => !y.used && daysApart(y.k, K[best]) <= SPLIT_MATCH_DAYS);
+        if (ysj) ysj.used = true;
+        fixes.push({ type: 'ca', k: e.k, t: e.t, factor: round7(e.f) });
+        continue;
+      }
+      // 2) Sıçrama yok: Yahoo olayı kendi bölünme kaydıyla uygulamışsa oran farkını düzelt
+      const ys = splitEvents.find((y) => !y.used && daysApart(y.k, e.k) <= SPLIT_MATCH_DAYS);
+      if (ys) {
+        ys.used = true;
+        const corr = e.f * ys.R; // Yahoo 1/R uyguladı; resmi oran f
+        const iy = firstIndexAtOrAfter(K, ys.k);
+        if (Math.abs(Math.log(corr)) > 0.01 && iy > 0 && iy < n) {
+          jumpAt.set(iy, (jumpAt.get(iy) || 1) * corr);
+          fixes.push({ type: 'ca', k: e.k, t: e.t, factor: round7(e.f) });
+        }
+      }
+      // 3) Ne sıçrama ne Yahoo kaydı: Yahoo fiyatı zaten düzeltmiş, dokunma
+    }
+  }
+
+  const addJump = (j, f) => jumpAt.set(j, (jumpAt.get(j) || 1) * f);
   for (let j = 1; j < n; j++) {
-    if (jumpAt.has(j)) continue;
-    const r = C[j] / C[j - 1];
+    const r = residual(j);
     if (r > GLITCH_RATIO || r < 1 / GLITCH_RATIO) {
       const lg = Math.log10(r);
       // 10'un kuvvetine yakınsa (birim/sıfır hatası) tam kuvveti kullan
       const f = Math.abs(lg - Math.round(lg)) < 0.15 ? Math.pow(10, Math.round(lg)) : r;
-      jumpAt.set(j, f);
+      addJump(j, f);
       fixes.push({ type: 'rescale', k: K[j], factor: round7(f) });
       continue;
     }
@@ -153,19 +212,19 @@ export function processDaily(res) {
       outside(e.R, 1.33) && r * e.R > 0.7 && r * e.R < 1.4);
     if (ev) {
       ev.used = true;
-      jumpAt.set(j, 1 / ev.R);
+      addJump(j, 1 / ev.R);
       divBasis.set(j, 1 / ev.R);
       fixes.push({ type: 'split', k: K[j], ratio: round7(ev.R) });
       continue;
     }
     const [lo, hi] = K[j] >= BIST_LIMIT10_FROM && daysApart(K[j], K[j - 1]) <= 5 ? BIST_TIGHT : BIST_WIDE;
     if (bist && (r < lo || r > hi)) {
-      jumpAt.set(j, r);
+      addJump(j, r);
       fixes.push({ type: 'corp', k: K[j], factor: round7(r) });
       continue;
     }
-    const r2 = j + 1 < n ? C[j + 1] / C[j] : 1;
-    if (outside(r, SPIKE_UP) && outside(r2, SPIKE_UP) && r * r2 > 0.9 && r * r2 < 1.1) {
+    const r2 = j + 1 < n ? residual(j + 1) : 1;
+    if (!jumpAt.has(j) && !jumpAt.has(j + 1) && outside(r, SPIKE_UP) && outside(r2, SPIKE_UP) && r * r2 > 0.9 && r * r2 < 1.1) {
       C[j] = Math.sqrt(C[j - 1] * C[j + 1]); // hatalı günü komşularının ortalamasıyla değiştir
       fixes.push({ type: 'spike', k: K[j] });
     }
@@ -182,11 +241,20 @@ export function processDaily(res) {
   if (jumpAt.size) scaleBefore(C, jumpAt);
 
   // --- Temettü faktörleri (temettü tutarıyla aynı birimdeki kapanışlarla) ---
-  const divsRaw = Object.values(res?.events?.dividends || {})
-    .filter((d) => d && Number.isFinite(d.amount) && d.amount > 0)
-    .sort((a, b) => a.date - b.date);
   const divs = [];
   const factorEvents = []; // [index, faktör] — index ve sonrası etkilenmez, öncesi çarpılır
+  const officialDivs = official ? official.filter((e) => e.t === '04' && e.f < 1 && e.f > 1 - MAX_DIV_YIELD) : [];
+  // Resmi temettüler (İş Yatırım ayar oranı, işlem gören fiyata göre hesaplanmış) Yahoo'nunkinin yerine
+  for (const e of officialDivs) {
+    const i = firstIndexAtOrAfter(K, e.k);
+    if (i <= 0 || i >= n) continue;
+    divs.push([K[i], e.d != null ? round7(e.d) : null]);
+    factorEvents.push([i, e.f]);
+  }
+  factorEvents.sort((a, b) => a[0] - b[0]);
+  const divsRaw = official ? [] : Object.values(res?.events?.dividends || {})
+    .filter((d) => d && Number.isFinite(d.amount) && d.amount > 0)
+    .sort((a, b) => a.date - b.date);
   for (const d of divsRaw) {
     const k = dateKey(d.date, tz);
     const i = firstIndexAtOrAfter(K, k);
@@ -226,6 +294,7 @@ export function processDaily(res) {
     fe: factorEvents.map(([i, f]) => [K[i], round7(f)]), // [ex-date, faktör]: o günden önceki kapanışlar f ile çarpılır
     splits,
     fixes,
+    src: official ? 'isyatirim' : null, // temettü / sermaye olaylarının kaynağı
     price: meta.regularMarketPrice,
     priceTime: meta.regularMarketTime,
   };
