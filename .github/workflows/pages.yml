@@ -68,3 +68,19 @@ jobs:
           # Tek commit'lik geçmiş: eski sürümler birikmesin
           git push -q -f origin gh-pages
           echo "Yayınlandı: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+      - name: Saatlik döngüyü canlı tut
+        # dongu.yml çalışmıyorsa (ilk kurulum ya da koptuysa) yeniden başlat
+        if: success() || failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.event.repository.default_branch }}
+        run: |
+          h=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/dongu.yml"
+          alive=$(curl -fsS "${h[@]}" "$API/runs?per_page=5" | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+          if [ "${alive:-0}" = "0" ]; then
+            curl -fsS -X POST "${h[@]}" "$API/dispatches" -d "{\"ref\":\"$REF\"}" && echo "Döngü yeniden başlatıldı"
+          else
+            echo "Döngü çalışıyor"
+          fi

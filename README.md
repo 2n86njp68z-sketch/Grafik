@@ -109,6 +109,8 @@ Yeni halka arzları eklemek için `scripts/build-catalog.mjs` içindeki listeye 
 `npm run catalog` çalıştırın.
 
 Web sürümü `.github/workflows/pages.yml` ile GitHub Actions'ta derlenip `gh-pages` branch'ine yazılır; GitHub Pages o branch'i yayınlar.
+GitHub'ın zamanlayıcısı güvenilir çalışmadığından saatlik güncellemeyi `.github/workflows/dongu.yml` başlatır:
+bir saat bekler, siteyi güncelletir ve kendini yeniden başlatır.
 
 ```
 server.js                 Yerel web sunucusu (bağımlılıksız Node.js)
