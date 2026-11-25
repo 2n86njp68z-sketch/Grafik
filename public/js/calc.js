@@ -84,6 +84,19 @@ const round7 = (v) => (v == null ? v : Number(v.toPrecision(7)));
 // Bir günde 20 kattan fazla değişim gerçek bir fiyat hareketi değil, veri hatasıdır
 // (ör. 2005 YTL geçişinde 6 sıfır atılmasının bazı hisselerde düzeltilmemiş olması).
 const GLITCH_RATIO = 20;
+// Borsa İstanbul'da günlük fiyat sınırı ±%10 (eskiden ±%20): tek günde %40'tan fazla düşüş ya da
+// %70'ten fazla yükseliş gerçek bir işlem olamaz; Yahoo'nun fiyata yansıtmadığı bedelsiz sermaye
+// artırımı / bölünme / birleştirme ya da veri hatasıdır.
+const BIST_DOWN = 0.6;
+const BIST_UP = 1.7;
+// Her piyasada: %70+ sıçrayıp ertesi gün geri dönen tek günlük fiyat veri hatasıdır.
+const SPIKE_UP = 1.7;
+// Yahoo'nun bölünme kaydı fiyattaki sıçramayla eşleşirse (tarihi ±30 gün, oranı ±%40) kaydın tam
+// oranı kullanılır; böylece o günün gerçek fiyat hareketi de korunur.
+const SPLIT_MATCH_DAYS = 30;
+const isBist = (symbol) => /\.IS$/i.test(symbol || '');
+const outside = (r, up) => r > up || r < 1 / up;
+const daysApart = (a, b) => Math.abs(keyToSec(a) - keyToSec(b)) / 86400;
 // Kapanışın %50'sinden büyük tek seferlik temettü kaydı bozuk kabul edilir.
 const MAX_DIV_YIELD = 0.5;
 
@@ -111,7 +124,60 @@ export function processDaily(res) {
   const n = K.length;
   const fixes = [];
 
-  // --- Temettü faktörleri (ham kapanışlarla, tutarlı birimde) ---
+  // --- Fiyat düzeltmeleri: düzeltilmemiş bölünme/bedelsiz ve veri hataları ---
+  // jumpAt: j → f; j'den önceki kapanışlar f ile çarpılır (j günündeki sıçrama giderilir).
+  // divBasis: temettü verimini hesaplarken kullanılacak düzeltmeler. Yahoo bildiği bölünmelerde
+  // temettü tutarlarını da bölünmeye göre düzeltiyor; diğer durumlarda tutarlar ham fiyatla uyumlu.
+  const splitEvents = Object.values(res?.events?.splits || {})
+    .filter((s) => s && s.numerator > 0 && s.denominator > 0)
+    .map((s) => ({ k: dateKey(s.date, tz), R: s.numerator / s.denominator, used: false }));
+  const bist = isBist(meta.symbol);
+  const jumpAt = new Map();
+  const divBasis = new Map();
+  for (let j = 1; j < n; j++) {
+    if (jumpAt.has(j)) continue;
+    const r = C[j] / C[j - 1];
+    if (r > GLITCH_RATIO || r < 1 / GLITCH_RATIO) {
+      const lg = Math.log10(r);
+      // 10'un kuvvetine yakınsa (birim/sıfır hatası) tam kuvveti kullan
+      const f = Math.abs(lg - Math.round(lg)) < 0.15 ? Math.pow(10, Math.round(lg)) : r;
+      jumpAt.set(j, f);
+      fixes.push({ type: 'rescale', k: K[j], factor: round7(f) });
+      continue;
+    }
+    if (r > 0.75 && r < 1.33) continue;
+    const ev = splitEvents.find((e) => !e.used && daysApart(e.k, K[j]) <= SPLIT_MATCH_DAYS &&
+      outside(e.R, 1.33) && r * e.R > 0.7 && r * e.R < 1.4);
+    if (ev) {
+      ev.used = true;
+      jumpAt.set(j, 1 / ev.R);
+      divBasis.set(j, 1 / ev.R);
+      fixes.push({ type: 'split', k: K[j], ratio: round7(ev.R) });
+      continue;
+    }
+    if (bist && (r < BIST_DOWN || r > BIST_UP)) {
+      jumpAt.set(j, r);
+      fixes.push({ type: 'corp', k: K[j], factor: round7(r) });
+      continue;
+    }
+    const r2 = j + 1 < n ? C[j + 1] / C[j] : 1;
+    if (outside(r, SPIKE_UP) && outside(r2, SPIKE_UP) && r * r2 > 0.9 && r * r2 < 1.1) {
+      C[j] = Math.sqrt(C[j - 1] * C[j + 1]); // hatalı günü komşularının ortalamasıyla değiştir
+      fixes.push({ type: 'spike', k: K[j] });
+    }
+  }
+  const scaleBefore = (arr, map) => {
+    let mult = 1;
+    for (let j = n - 1; j >= 0; j--) {
+      if (map.has(j + 1)) mult *= map.get(j + 1);
+      if (mult !== 1) arr[j] *= mult;
+    }
+    return arr;
+  };
+  const Cdiv = scaleBefore(C.slice(), divBasis); // kopya: C aşağıda yerinde düzeltiliyor
+  if (jumpAt.size) scaleBefore(C, jumpAt);
+
+  // --- Temettü faktörleri (temettü tutarıyla aynı birimdeki kapanışlarla) ---
   const divsRaw = Object.values(res?.events?.dividends || {})
     .filter((d) => d && Number.isFinite(d.amount) && d.amount > 0)
     .sort((a, b) => a.date - b.date);
@@ -121,7 +187,7 @@ export function processDaily(res) {
     const k = dateKey(d.date, tz);
     const i = firstIndexAtOrAfter(K, k);
     if (i <= 0 || i >= n) continue;
-    const prev = C[i - 1];
+    const prev = Cdiv[i - 1];
     const r = d.amount / prev;
     if (!(r > 0 && r < MAX_DIV_YIELD)) {
       fixes.push({ type: 'div-skip', k, amount: d.amount });
@@ -135,26 +201,6 @@ export function processDaily(res) {
   for (let j = n - 1, e = factorEvents.length - 1; j >= 0; j--) {
     while (e >= 0 && factorEvents[e][0] > j) { cum *= factorEvents[e][1]; e--; }
     A[j] = C[j] * cum;
-  }
-
-  // --- Veri hatası düzeltmesi (ani 20x+ sıçramalar) ---
-  const jumpAt = new Map();
-  for (let j = 1; j < n; j++) {
-    const ratio = C[j] / C[j - 1];
-    if (ratio > GLITCH_RATIO || ratio < 1 / GLITCH_RATIO) {
-      const lg = Math.log10(ratio);
-      // 10'un kuvvetine yakınsa (birim/sıfır hatası) tam kuvveti kullan
-      const k = Math.abs(lg - Math.round(lg)) < 0.15 ? Math.pow(10, Math.round(lg)) : ratio;
-      jumpAt.set(j, k);
-      fixes.push({ type: 'rescale', k: K[j], factor: round7(k) });
-    }
-  }
-  if (jumpAt.size) {
-    let mult = 1;
-    for (let j = n - 1; j >= 0; j--) {
-      if (jumpAt.has(j + 1)) mult *= jumpAt.get(j + 1);
-      if (mult !== 1) { C[j] *= mult; A[j] *= mult; }
-    }
   }
 
   const splits = Object.values(res?.events?.splits || {})
