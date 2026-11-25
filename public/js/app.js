@@ -786,10 +786,11 @@ function toggleTheme() {
 
 function indexCatalog() {
   state.bySym = new Map(state.catalog.items.map((it) => [it.s, it]));
-  for (const it of state.catalog.items) {
+  state.catalog.items.forEach((it, i) => {
     it._sym = F.normalizeText(F.displaySymbol(it.s));
     it._name = F.normalizeText(it.n);
-  }
+    it._i = i; // katalog sırası (ETF'ler fon büyüklüğüne göre sıralı)
+  });
 }
 
 function renderChips() {
@@ -848,14 +849,17 @@ function searchCatalog(q) {
   for (const it of state.catalog.items) {
     let sc = 0;
     if (it._sym === q) sc = 100;
+    else if (it._name === q) sc = 90;
     else if (it._sym.startsWith(q)) sc = 80;
+    else if ((' ' + it._name + ' ').includes(' ' + q + ' ')) sc = 65; // tam kelime ("gold" → Gold, Goldman değil)
     else if (it._name.startsWith(q)) sc = 60;
     else if (it._name.includes(' ' + q)) sc = 50;
     else if (it._sym.includes(q)) sc = 40;
     else if (it._name.includes(q)) sc = 30;
     if (sc) out.push([sc, it]);
   }
-  out.sort((a, b) => b[0] - a[0] || a[1].s.localeCompare(b[1].s));
+  // Eşit eşleşmede katalog sırası: önce emtia/endeks/hisseler, ETF'lerde büyük fon önce
+  out.sort((a, b) => b[0] - a[0] || a[1]._i - b[1]._i);
   return out.slice(0, 120).map((x) => x[1]);
 }
 
@@ -877,7 +881,7 @@ function renderList() {
       const d = document.createElement('div');
       d.className = 'list-empty';
       d.textContent = api.isStatic
-        ? 'Sonuç yok. Web sürümünde yalnızca listedeki ~1.200 sembol var.'
+        ? 'Sonuç yok. Web sürümünde yalnızca listedeki ~2.200 sembol var.'
         : state.query.trim().length >= 2 ? 'Aranıyor…' : 'Sonuç yok';
       frag.append(d);
     }
