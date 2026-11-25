@@ -506,7 +506,7 @@ function renderNotes(view, cur, truncated, earliest) {
   }
   if (!convAvailable(state.cur) && !it.lockCur) add(`⚠️ Kur verisi alınamadığı için ${D.native} cinsinden gösteriliyor.`);
   // Düzeltme görüntülenen dönemi etkiliyorsa not düş; çoksa (eski BIST verisi) tek satırda özetle
-  const fixes = (D.daily.fixes || []).filter((f) => earliest && f.k >= earliest);
+  const fixes = (D.daily.fixes || []).filter((f) => earliest && (f.to || f.k) >= earliest); // dönem düzeltmesi görünen aralıkla kesişiyorsa
   if (fixes.length > 3) {
     const last = fixes[fixes.length - 1];
     add(`🔧 Bu dönemde Yahoo verisindeki ${fixes.length} hata düzeltildi (fiyata yansıtılmamış bedelsiz/bölünmeler, hatalı fiyatlar). En sonuncusu: ${F.fmtDateKeyNumeric(last.k)}.`);
