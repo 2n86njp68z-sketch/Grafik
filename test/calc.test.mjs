@@ -106,6 +106,25 @@ test('BIST: bölünme kaydı olmadan tek günde %40+ düşüş bedelsiz kabul ed
   close(d.a[0] / d.c[0], 1 - 2 / 100);
 });
 
+test('BIST ±%10 döneminde (2020-03-16 sonrası) iki günlük sınırı aşan hareket de düzeltilir', () => {
+  // YYAPI 2025-08-26: %50 bedelsiz → -%35 (eski -%40 eşiğine takılmıyordu)
+  const d = processDaily(yahoo({
+    symbol: 'YYAPI.IS',
+    keys: ['2025-08-22', '2025-08-25', '2025-08-26', '2025-08-27'],
+    closes: [30, 30.6, 19.92, 19.07],
+  }));
+  close(d.c[1], 19.92);
+  assert.equal(d.fixes[0].type, 'corp');
+  // Yahoo'nun bir günü atladığı iki günlük -%19 hareket (0,9 × 0,9) gerçektir, dokunulmaz
+  const g = processDaily(yahoo({ symbol: 'IHLAS.IS', keys: ['2026-11-23', '2026-11-25'], closes: [10, 8.1] }));
+  assert.deepEqual(g.c, [10, 8.1]);
+  // ±%20 döneminde -%28 gerçek olabilir; deprem sonrası gibi uzun aralar da geniş eşikle bakılır
+  const old = processDaily(yahoo({ symbol: 'TEST.IS', keys: ['2019-05-02', '2019-05-03'], closes: [10, 7.2] }));
+  assert.deepEqual(old.c, [10, 7.2]);
+  const quake = processDaily(yahoo({ symbol: 'CCOLA.IS', keys: ['2023-02-07', '2023-02-15'], closes: [160.6, 190.8] }));
+  assert.deepEqual(quake.c, [160.6, 190.8]);
+});
+
 test('BIST dışı: gerçek sert düşüş (ör. bilanço sonrası %52) düzeltilmez', () => {
   const d = processDaily(yahoo({
     symbol: 'AAPL', tz: 'America/New_York', currency: 'USD',
