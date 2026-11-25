@@ -14,12 +14,12 @@ saatte bir, hafta sonu günde bir otomatik güncellenir (sayfanın altında son 
 
 ## Neler var?
 
-- **~2.200 hazır enstrüman**, sol menüde gruplar halinde:
+- **~2.700 hazır enstrüman**, sol menüde gruplar halinde:
   - **BIST**: 596 hisse + BIST 100, BIST 30, BIST Banka, BIST Sınai endeksleri
     (diğer BIST endekslerinin geçmiş verisi Yahoo Finance'te bulunmuyor)
   - **ABD**: S&P 500'ün tamamı (503 hisse), Dow Jones 30, popüler diğer hisseler (ASML, TSM, Shopify…),
     21 endeks (S&P 500, Nasdaq, Dow, Russell, SOX, VIX; S&P 500 ve Russell 2000'in **toplam getiri** versiyonları)
-  - **ETF**: fon büyüklüğüne (AUM) göre en büyük **1000 ABD ETF'i** (büyükten küçüğe sıralı;
+  - **ETF**: fon büyüklüğüne (AUM) göre en büyük **1500 ABD ETF'i** (büyükten küçüğe sıralı;
     `npm run catalog -- --etf` ile yenilenir)
   - **Emtia**: Altın, **Gram Altın**, Gümüş, Gram Gümüş, Platin, Paladyum, Bakır, Petrol (WTI/Brent), Doğal Gaz
   - **Döviz & Kripto**: USD/TRY, EUR/TRY, GBP/TRY, EUR/USD, Dolar Endeksi, Bitcoin, Ethereum
