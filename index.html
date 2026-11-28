@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Grafik — Hisse, Endeks, Altın</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#2a78d6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Grafik">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Enstrüman listesi">
+    <div class="side-head">
+      <div class="brand"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 17l5-6 4 3 6-8 3 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Grafik</div>
+      <button class="icon-btn only-mobile" id="closeSide" aria-label="Listeyi kapat">✕</button>
+    </div>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="Ara: THYAO, Apple, altın, BIST 100…" autocomplete="off" spellcheck="false" aria-label="Sembol ara">
+      <kbd class="only-desktop">/</kbd>
+    </div>
+    <div class="chips" id="groupChips" role="tablist" aria-label="Gruplar"></div>
+    <div class="list" id="list" role="listbox" aria-label="Enstrümanlar"></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <main class="main">
+    <header class="top">
+      <button class="icon-btn only-mobile" id="menuBtn" aria-label="Enstrüman listesini aç">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="title">
+        <div class="title-row">
+          <h1 id="symName">Yükleniyor…</h1>
+          <button class="icon-btn fav" id="favBtn" aria-label="Favorilere ekle" aria-pressed="false">☆</button>
+        </div>
+        <div class="sub" id="symSub"></div>
+      </div>
+      <div class="quote">
+        <div class="price" id="lastPrice"></div>
+        <div class="delta" id="dayChange"></div>
+      </div>
+      <button class="icon-btn" id="phoneBtn" aria-label="Telefonda aç" title="Telefonda aç" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 18h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="icon-btn" id="themeBtn" aria-label="Açık/koyu tema">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="currentColor"/></svg>
+      </button>
+    </header>
+
+    <div class="toolbar">
+      <div class="seg ranges" id="rangeSeg" role="group" aria-label="Dönem"></div>
+      <div class="opts">
+        <div class="seg" id="modeSeg" role="group" aria-label="Gösterim">
+          <button data-v="price">Fiyat</button>
+          <button data-v="pct">Yüzde %</button>
+        </div>
+        <div class="seg" id="curSeg" role="group" aria-label="Para birimi">
+          <button data-v="TRY">₺ TL</button>
+          <button data-v="USD">$ USD</button>
+        </div>
+        <label class="switch" id="trWrap" title="Temettüler ödendiği gün yeniden yatırılmış gibi hesaplanır (toplam getiri)">
+          <input type="checkbox" id="trChk"><span class="track"></span><span>Temettü dahil</span>
+        </label>
+        <label class="switch" title="Logaritmik ölçek (uzun dönemlerde faydalı)">
+          <input type="checkbox" id="logChk"><span class="track"></span><span>Log</span>
+        </label>
+        <button class="btn cmp-btn" id="cmpBtn" title="Başka bir hisse, endeks, ETF ya da emtia ile aynı grafikte karşılaştır">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 17l5-6 4 3 6-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 20l6-4 4 2 8-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg>
+          Karşılaştır
+        </button>
+      </div>
+    </div>
+    <div class="cmp-bar" id="cmpBar" hidden></div>
+
+    <section class="card chart-card" id="chartCard">
+      <div class="legend" id="legend" aria-live="polite"></div>
+      <div class="chart" id="chart"></div>
+      <div class="chart-msg" id="chartMsg" hidden></div>
+      <div class="pick-hint" id="pickHint" hidden></div>
+    </section>
+
+    <section class="card calc-card" aria-labelledby="calcTitle">
+      <div class="calc-head">
+        <h2 id="calcTitle">Tarih aralığı getirisi</h2>
+        <div class="calc-inputs">
+          <label>Başlangıç<input type="date" id="fromDate"></label>
+          <span class="arrow" aria-hidden="true">→</span>
+          <label>Bitiş<input type="date" id="toDate"></label>
+          <button class="btn" id="pickBtn" title="Grafikte iki noktaya tıklayarak aralık seçin">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 3v18M19 3v18M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Grafikten seç
+          </button>
+          <button class="btn ghost" id="resetMeasure" hidden>Sıfırla</button>
+        </div>
+      </div>
+      <div class="calc-body">
+        <div class="hero" id="resPct">—</div>
+        <div class="res-lines">
+          <div class="res-main" id="resDetail"></div>
+          <div class="res-extra" id="resExtra"></div>
+        </div>
+      </div>
+      <div class="res-cmp" id="resCmp" hidden></div>
+    </section>
+
+    <footer class="notes" id="notes"></footer>
+    <footer class="credits">
+      Veri: Yahoo Finance (gecikmeli olabilir)<span id="dataAge"></span> · Grafik: <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a> · Yatırım tavsiyesi değildir.
+    </footer>
+  </main>
+</div>
+
+<dialog class="dlg cmp-dlg" id="cmpDlg" aria-labelledby="cmpTitle">
+  <form method="dialog" class="dlg-close"><button class="icon-btn" aria-label="Kapat">✕</button></form>
+  <h2 id="cmpTitle">Karşılaştır</h2>
+  <p class="dlg-note cmp-note">Aynı grafikte, aynı başlangıç gününden itibaren yüzde değişim olarak gösterilir (en fazla 3 tane).</p>
+  <input id="cmpSearch" class="cmp-search" type="search" placeholder="Ara: ASELS, S&amp;P 500, altın, QQQ…" autocomplete="off" spellcheck="false" aria-label="Karşılaştırılacak enstrümanı ara">
+  <div class="list cmp-list" id="cmpList" role="listbox" aria-label="Sonuçlar"></div>
+</dialog>
+
+<dialog class="dlg" id="phoneDlg" aria-labelledby="phoneTitle">
+  <form method="dialog" class="dlg-close"><button class="icon-btn" aria-label="Kapat">✕</button></form>
+  <h2 id="phoneTitle">Telefondan aç</h2>
+  <div class="qr" id="qrBox"></div>
+  <div class="phone-url" id="phoneUrl"></div>
+  <ol class="steps" id="phoneSteps">
+    <li>Telefon bu bilgisayarla <b>aynı Wi-Fi</b>'a bağlı olsun.</li>
+    <li>Telefonun kamerasını QR koda tutun ve çıkan bağlantıya dokunun.</li>
+    <li>İsterseniz tarayıcı menüsünden <b>“Ana Ekrana Ekle”</b> deyin; uygulama gibi açılır.</li>
+  </ol>
+  <p class="dlg-note" id="phoneNote">Bilgisayardaki uygulama penceresi açık kaldığı sürece çalışır.
+    Bağlanmazsa: Windows “erişime izin ver” diye sorduysa <b>İzin ver</b>'e basın ve Wi-Fi ağının
+    <b>Özel ağ</b> olarak ayarlı olduğundan emin olun.</p>
+  <p class="dlg-note" id="phoneOff" hidden>Telefon erişimi kapalı. Uygulamayı <b>baslat.bat</b> (Windows) ya da
+    <b>baslat.command</b> (Mac) ile açın; telefon erişimi kendiliğinden açılır.</p>
+</dialog>
+
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
